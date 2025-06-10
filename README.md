@@ -17,10 +17,10 @@ This codebase is currently under development. The implementation will be made av
 If you find this work useful in your research, please cite our paper:
 
 ```bibtex
-@article{reparameterized_llm_training,
+@article{qiu2025poet,
   title={Reparameterized LLM Training via Orthogonal Equivalence Transformation},
-  author={[Authors]},
-  journal={arXiv preprint arXiv:XXXX.XXXXX},
-  year={2024}
+  author={Qiu, Zeju and Buchholz, Simon and Xiao, Tim Z. and Dax, Maximilian and Sch\"olkopf, Bernhard and Liu, Weiyang},
+  journal={arXiv preprint arXiv:2506.08001},
+  year={2025}
 }
 ```
