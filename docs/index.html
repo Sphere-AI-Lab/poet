@@ -251,84 +251,6 @@
     </div>
   </section>
 
-
-<!-- BUILDING SECTION -->
-<section class="hero is-light is-small">
-  <div class="hero-body has-text-centered">
-    <h1 class="title is-1 mmmu">Training with POET</h1>
-  </div>
-</section>
-
-
-<section class="section">
-<div class="container">
-  <!-------------------------------------------------------------------- RESULTS SECTION -------------------------------------------------------------------->
-  <section class="section">
-    <div class="container">
-      <div class="columns is-centered has-text-centered">
-        <div class="column is-four-fifths">
-          <h2 class="title is-3">Training Algorithm</h2>
-          <div class="content has-text-justified">
-            <p><strong>Step 1: Initialization.</strong> We initialize the weight matrices using normalized Gaussian: \( \mathbf{W} \leftarrow \mathbf{W}_0 \).</p>
-            <p><strong>Step 2: Orthogonal matrix initialization.</strong> For fully stochastic SPO, we randomly sample an index set \( \mathbf{S} \), and parameterize \( \tilde{\mathbf{G}}_{R} \in \mathbb{R}^{b \times b} \) and \( \tilde{\mathbf{G}}_{P} \in \mathbb{R}^{b \times b} \) using CNP. Both matrices are initialized as identity, so \( \mathbf{R} \) and \( \mathbf{P} \) also start as identity matrices. For block-stochastic SPO, we sample a random permutation matrix \( \mathbf{\Psi}_R, \mathbf{\Psi}_P \), and parameterize \( \{ \tilde{\mathbf{G}}_R^{1}, \cdots, \tilde{\mathbf{G}}_R^{\lceil m/b \rceil} \} \) and \( \{ \tilde{\mathbf{G}}_P^{1}, \cdots, \tilde{\mathbf{G}}_P^{\lceil m/b \rceil} \} \) using CNP. Then we initialize them as the identity, so \( \mathbf{R} \) and \( \mathbf{P} \) again start as identity matrices.</p>
-            <p><strong>Step 3: Efficient orthogonal parameterization.</strong> For fully stochastic SPO, we have \( \mathbf{R} = \mathbf{I}_m + \mathbf{D}(\mathbf{S})(\tilde{\mathbf{G}}_R - \mathbf{I}_b)\mathbf{D}(\mathbf{S})^\top \) and \( \mathbf{P} = \mathbf{I}_m + \mathbf{D}(\mathbf{S})(\tilde{\mathbf{G}}_P - \mathbf{I}_b)\mathbf{D}(\mathbf{S})^\top \). For block-stochastic SPO, we have \( \mathbf{R} = \mathbf{\Psi}_R^\top \mathrm{Diag}(\tilde{\mathbf{G}}^1_R, \cdots, \tilde{\mathbf{G}}^{\lceil m/b \rceil}_R)\mathbf{\Psi}_R \) and \( \mathbf{P} = \mathbf{\Psi}_P^\top \mathrm{Diag}(\tilde{\mathbf{G}}^1_P, \cdots, \tilde{\mathbf{G}}^{\lceil m/b \rceil}_P)\mathbf{\Psi}_P \).</p>
-            <p><strong>Step 4: Inner training loop for updating orthogonal matrices.</strong> The equivalent weight matrix in the forward pass is \( \mathbf{R}\mathbf{W}\mathbf{P} \). Gradients are backpropagated through \( \mathbf{R} \) and \( \mathbf{P} \) to update \( \tilde{\mathbf{G}}_{R}, \tilde{\mathbf{G}}_{P} \) (fully stochastic) or \( \tilde{\mathbf{G}}_{R}^i, \tilde{\mathbf{G}}_{P}^i, \forall i \) (block-stochastic). This inner loop runs for a fixed number of iterations.</p>
-            <p><strong>Step 5: Merge-then-reinitialize.</strong> The learned orthogonal matrices \( \mathbf{R} \) and \( \mathbf{P} \) are merged into the weight matrix by \( \mathbf{W} \leftarrow \mathbf{R}\mathbf{W}\mathbf{P} \). If not terminated, return to <strong>Step 2</strong> for reinitialization.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="columns is-centered has-text-centered">
-        <div class="column is-four-fifths">
-          <h2 class="title is-3">Efficient Approximation to Orthogonality</h2>
-          <div class="content has-text-justified">
-            <p>
-              POET is conceptually simple, requiring only the optimization of two orthogonal matrices. However, these matrices are typically large, and naively optimizing them leads to significant computational challenges. We introduce the <strong>Stochastic Primitive Optimization</strong> (SPO). The core idea of SPO is inspired by how QR factorization is performed using Givens rotations and Householder transformations. Both methods construct a large orthogonal matrix \( \mathbf{R} \) by sequentially applying primitive orthogonal transformations (e.g., Givens rotations or Householder reflections), i.e., \( \mathbf{R} = \prod_{i=1}^c \mathbf{G}_i \), where \( \mathbf{G}_i \) denotes the \( i \)-th primitive orthogonal matrix. While each \( \mathbf{G}_i \) is of the same size as \( \mathbf{R} \), it is parameterized by significantly fewer degrees of freedom. Both Givens rotation and Householder reflection use relatively low-capacity parameterizations—for example, each Givens rotation \( \mathbf{G}_i \) involves only a single effective parameter—which limits their efficiency in representing the full orthogonal matrix. SPO follows a similar idea of factorizing the original orthogonal matrix into multiple primitive orthogonal matrices. However, unlike Givens and Householder methods, SPO treats the number of effective parameters in each primitive matrix as a tunable hyperparameter and adopts a stochastic sparsity pattern.
-            </p>
-            <img src="static/images/block_pattern.png" alt="algebraic reasoning" class="center" style="width: 100%; height: auto;">
-            <br>
-            <ul>
-              <li>
-                <strong>Fully stochastic SPO.</strong> The basic idea of fully stochastic SPO is to randomly sample a small submatrix and enforce its orthogonality, allowing it to be easily extended to a full orthogonal matrix by embedding it within an identity matrix—a process similar to Givens or Householder transformations. To represent a large orthogonal matrix \( \mathbf{R} \in \mathbb{R}^{m \times m} \), we start by defining \( c \) index sets \( \mathbf{S}^j = \{ s^j_1, \cdots, s^j_b \} \subseteq \{ 1, \cdots, m \} \) (\( j \in [1, c] \)), where each set has cardinality \( |\mathbf{S}^j| = b \), a hyperparameter controlling the number of effective parameters of a primitive orthogonal matrix. \( \mathbf{S}^j, \forall j \) are randomly sampled from the full indices \( \{ 1, \cdots, m \} \). Let \( \tilde{\mathbf{G}}_j \in \mathbb{R}^{b \times b} \) be a small orthogonal matrix, and \( \mathbf{D}(\mathbf{S}^j) = \{ \mathbf{e}(s^j_1), \cdots, \mathbf{e}(s^j_b) \} \in \mathbb{R}^{m \times b} \) be a selection matrix, where \( \mathbf{e}(k) \) is the standard basis vector with a 1 in the \( k \)-th position and 0 elsewhere. The factorization is given by:
-                <br><br>
-                <span style="display:block; text-align:center;">
-                  \( \mathbf{R} = \prod_{i=1}^c \left( \underbrace{ \mathbf{I}_m + \mathbf{D}(\mathbf{S}^i) \cdot (\tilde{\mathbf{G}}_i - \mathbf{I}_b) \cdot \mathbf{D}(\mathbf{S}^i)^\top }_{ \mathbf{G}_i\text{: The } i\text{-th primitive orthogonal matrix} } \right), \quad \text{s.t.}~ \tilde{\mathbf{G}}_i^\top \tilde{\mathbf{G}}_i = \tilde{\mathbf{G}}_i \tilde{\mathbf{G}}_i^\top = \mathbf{I}_b,~\forall i \)
-                </span>
-                <br>
-                where \( \mathbf{D}(\mathbf{S}^i) \cdot (\mathbf{A}) \cdot \mathbf{D}(\mathbf{S}^i)^\top \) is a projector that replaces the \( b \times b \) sub-block with \( \mathbf{A} \). \( \mathbf{I}_m \) and \( \mathbf{I}_b \) are identity matrices of size \( m \times m \) and \( b \times b \), respectively. To efficiently parameterize small orthogonal matrices \( \tilde{\mathbf{G}}_i \), we can use the CNP introduced in the next section.
-              </li>
-              <li>
-                <strong>Block-stochastic SPO.</strong> While fully stochastic SPO is simple, it may fail to transform all neuron dimensions because the identity matrix leaves part of the space unchanged. To address this, we propose block-stochastic SPO, which first constructs a block-diagonal orthogonal matrix with small blocks for parameter efficiency, and then applies a random permutation to enhance expressiveness by randomizing the sparsity pattern. Block-stochastic SPO transforms all neuron dimensions simultaneously. Formally, we have:
-                <br><br>
-                <span style="display:block; text-align:center;">
-                  \( \mathbf{R} = \prod_{i=1}^c \left( \underbrace{ \mathbf{\Psi}_i^\top \cdot \mathrm{Diag}(\tilde{\mathbf{G}}^1_i, \tilde{\mathbf{G}}^2_i, \cdots, \tilde{\mathbf{G}}^{\lceil m/b \rceil}_i) \cdot \mathbf{\Psi}_i }_{ \mathbf{G}_i\text{: The } i\text{-th primitive orthogonal matrix} } \right), \quad \text{s.t.}~ (\tilde{\mathbf{G}}_i^j)^\top \tilde{\mathbf{G}}_i^j = \tilde{\mathbf{G}}_i^j (\tilde{\mathbf{G}}_i^j)^\top = \mathbf{I}_b,~\forall i, j \)
-                </span>
-                <br>
-                where \( \tilde{\mathbf{G}}^j_i \in \mathbb{R}^{b \times b} \) is the \( j \)-th block of the block diagonal matrix, and \( \mathbf{\Psi}_i, \forall i \) are all random permutation matrices. As long as each diagonal block \( \tilde{\mathbf{G}}^j_i \) is an orthogonal matrix, both \( \mathbf{G}_i \) and \( \mathbf{R} \) are also orthogonal matrices. We also use CNP to efficiently parameterize each orthogonal block \( \tilde{\mathbf{G}}^j_i \).
-              </li>
-              <li>
-                <strong>Cayley-Neumann Parameterization (CNP)</strong>
-                <p>
-                  The classic Cayley parameterization generates an orthogonal matrix \(\mathbf{R}\) in the form of \(\mathbf{R}=(\mathbf{I}+\mathbf{Q})(\mathbf{I}-\mathbf{Q})^{-1}\) where \(\mathbf{Q}\) is a skew-symmetric matrix satisfying \(\mathbf{Q}=-\mathbf{Q}^\top\). A minor caveat of this parameterization is that it only produces orthogonal matrices with determinant \(1\) (i.e., elements of the special orthogonal group), but empirical results in Orthogonal Finetuning (OFT) indicate that this constraint does not hurt performance. However, the matrix inverse in the original Cayley parameterization introduces numerical instability and computational overhead, limiting its scalability to large orthogonal matrices. To address this, we approximate the matrix inverse using a truncated Neumann series:
-                </p>
-                \begin{equation}\label{eq:cnp}
-                  \mathbf{R}=(\mathbf{I}+\mathbf{Q})(\mathbf{I}-\mathbf{Q})^{-1}=(\mathbf{I}+\mathbf{Q})\cdot\big(\sum_{i=0}^\infty \mathbf{Q}^i \big) \approx (\mathbf{I}+\mathbf{Q})\cdot\big(\mathbf{I}+\sum_{i=1}^k \mathbf{Q}^i \big),
-                \end{equation}
-                <p>
-                  where a larger number of approximation terms \(k\) leads to a smaller approximation error. By avoiding matrix inversion, the training stability of POET is improved; however, this comes with a price--the approximation is valid only when the Neumann series converges in the operator norm. To initialize orthogonal matrices as identity, we set \(\mathbf{Q}\) to a zero matrix in CNP, satisfying the convergence condition initially. As the training progresses, however, updates to \(\mathbf{Q}\) may cause its operator norm to exceed \(1\), violating this condition. Fortunately, our merge-then-reinitialize trick mitigates this issue by periodically resetting \(\mathbf{Q}\) to a zero matrix, ensuring its operator norm remains small.
-                </p>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-  </div>
-</section>
-
-
-
 <!-- BUILDING SECTION -->
 <section class="hero is-light is-small">
   <div class="hero-body has-text-centered">
@@ -433,6 +355,19 @@
         </div>
       </div>
 
+
+      <div class="columns is-centered has-text-centered">
+        <div class="column is-four-fifths">
+          <h2 class="title is-3">Training Speedup</h2>
+          <div class="content has-text-justified">
+            <p>
+              To highlight POET's non-trivial performance improvement, we increase the training steps (i.e., effectively tokens seen) for AdamW, and find that POET-FS (\( b = 1/2 \)) still outperforms AdamW even if AdamW is trained with almost triple the number of tokens.
+            </p>
+            <img src="static/images/ablation_training_speedup.png" alt="algebraic reasoning" class="center" style="width: 60%; height: auto;">
+          </div>
+        </div>
+      </div>
+
       <div class="columns is-centered has-text-centered">
         <div class="column is-four-fifths">
           <h2 class="title is-3">Parameter and Memory Complexity</h2>
@@ -473,7 +408,6 @@
                 </tbody>
               </table>
             </div>
-            <br>
           </div>
         </div>
       </div>
@@ -482,6 +416,183 @@
   </div>
 </section>
 
+
+<!-- BUILDING SECTION -->
+<section class="hero is-light is-small">
+  <div class="hero-body has-text-centered">
+    <h1 class="title is-1 mmmu">Training with POET</h1>
+  </div>
+</section>
+
+
+<section class="section">
+<div class="container">
+  <!-------------------------------------------------------------------- RESULTS SECTION -------------------------------------------------------------------->
+  <section class="section">
+    <div class="container">
+      <div class="columns is-centered has-text-centered">
+        <div class="column is-four-fifths">
+          <h2 class="title is-3">Training Algorithm</h2>
+          <div class="content has-text-justified">
+            <p><strong>Step 1: Initialization.</strong> We initialize the weight matrices using normalized Gaussian: \( \mathbf{W} \leftarrow \mathbf{W}_0 \).</p>
+            <p><strong>Step 2: Orthogonal matrix initialization.</strong> For fully stochastic SPO, we randomly sample an index set \( \mathbf{S} \), and parameterize \( \tilde{\mathbf{G}}_{R} \in \mathbb{R}^{b \times b} \) and \( \tilde{\mathbf{G}}_{P} \in \mathbb{R}^{b \times b} \) using CNP. Both matrices are initialized as identity, so \( \mathbf{R} \) and \( \mathbf{P} \) also start as identity matrices. For block-stochastic SPO, we sample a random permutation matrix \( \mathbf{\Psi}_R, \mathbf{\Psi}_P \), and parameterize \( \{ \tilde{\mathbf{G}}_R^{1}, \cdots, \tilde{\mathbf{G}}_R^{\lceil m/b \rceil} \} \) and \( \{ \tilde{\mathbf{G}}_P^{1}, \cdots, \tilde{\mathbf{G}}_P^{\lceil m/b \rceil} \} \) using CNP. Then we initialize them as the identity, so \( \mathbf{R} \) and \( \mathbf{P} \) again start as identity matrices.</p>
+            <p><strong>Step 3: Efficient orthogonal parameterization.</strong> For fully stochastic SPO, we have \( \mathbf{R} = \mathbf{I}_m + \mathbf{D}(\mathbf{S})(\tilde{\mathbf{G}}_R - \mathbf{I}_b)\mathbf{D}(\mathbf{S})^\top \) and \( \mathbf{P} = \mathbf{I}_m + \mathbf{D}(\mathbf{S})(\tilde{\mathbf{G}}_P - \mathbf{I}_b)\mathbf{D}(\mathbf{S})^\top \). For block-stochastic SPO, we have \( \mathbf{R} = \mathbf{\Psi}_R^\top \mathrm{Diag}(\tilde{\mathbf{G}}^1_R, \cdots, \tilde{\mathbf{G}}^{\lceil m/b \rceil}_R)\mathbf{\Psi}_R \) and \( \mathbf{P} = \mathbf{\Psi}_P^\top \mathrm{Diag}(\tilde{\mathbf{G}}^1_P, \cdots, \tilde{\mathbf{G}}^{\lceil m/b \rceil}_P)\mathbf{\Psi}_P \).</p>
+            <p><strong>Step 4: Inner training loop for updating orthogonal matrices.</strong> The equivalent weight matrix in the forward pass is \( \mathbf{R}\mathbf{W}\mathbf{P} \). Gradients are backpropagated through \( \mathbf{R} \) and \( \mathbf{P} \) to update \( \tilde{\mathbf{G}}_{R}, \tilde{\mathbf{G}}_{P} \) (fully stochastic) or \( \tilde{\mathbf{G}}_{R}^i, \tilde{\mathbf{G}}_{P}^i, \forall i \) (block-stochastic). This inner loop runs for a fixed number of iterations.</p>
+            <p><strong>Step 5: Merge-then-reinitialize.</strong> The learned orthogonal matrices \( \mathbf{R} \) and \( \mathbf{P} \) are merged into the weight matrix by \( \mathbf{W} \leftarrow \mathbf{R}\mathbf{W}\mathbf{P} \). If not terminated, return to <strong>Step 2</strong> for reinitialization.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="columns is-centered has-text-centered">
+        <div class="column is-four-fifths">
+          <h2 class="title is-3">Efficient Approximation to Orthogonality</h2>
+          <div class="content has-text-justified">
+            <p>
+              POET is conceptually simple, requiring only the optimization of two orthogonal matrices. However, these matrices are typically large, and naively optimizing them leads to significant computational challenges. We introduce the <strong>Stochastic Primitive Optimization</strong> (SPO). The core idea of SPO is inspired by how QR factorization is performed using Givens rotations and Householder transformations. Both methods construct a large orthogonal matrix \( \mathbf{R} \) by sequentially applying primitive orthogonal transformations (e.g., Givens rotations or Householder reflections), i.e., \( \mathbf{R} = \prod_{i=1}^c \mathbf{G}_i \), where \( \mathbf{G}_i \) denotes the \( i \)-th primitive orthogonal matrix. While each \( \mathbf{G}_i \) is of the same size as \( \mathbf{R} \), it is parameterized by significantly fewer degrees of freedom. Both Givens rotation and Householder reflection use relatively low-capacity parameterizations—for example, each Givens rotation \( \mathbf{G}_i \) involves only a single effective parameter—which limits their efficiency in representing the full orthogonal matrix. SPO follows a similar idea of factorizing the original orthogonal matrix into multiple primitive orthogonal matrices. However, unlike Givens and Householder methods, SPO treats the number of effective parameters in each primitive matrix as a tunable hyperparameter and adopts a stochastic sparsity pattern.
+            </p>
+            <img src="static/images/block_pattern.png" alt="algebraic reasoning" class="center" style="width: 100%; height: auto;">
+            <br>
+            <ul>
+              <li>
+                <strong>Fully stochastic SPO.</strong> The basic idea of fully stochastic SPO is to randomly sample a small submatrix and enforce its orthogonality, allowing it to be easily extended to a full orthogonal matrix by embedding it within an identity matrix—a process similar to Givens or Householder transformations. To represent a large orthogonal matrix \( \mathbf{R} \in \mathbb{R}^{m \times m} \), we start by defining \( c \) index sets \( \mathbf{S}^j = \{ s^j_1, \cdots, s^j_b \} \subseteq \{ 1, \cdots, m \} \) (\( j \in [1, c] \)), where each set has cardinality \( |\mathbf{S}^j| = b \), a hyperparameter controlling the number of effective parameters of a primitive orthogonal matrix. \( \mathbf{S}^j, \forall j \) are randomly sampled from the full indices \( \{ 1, \cdots, m \} \). Let \( \tilde{\mathbf{G}}_j \in \mathbb{R}^{b \times b} \) be a small orthogonal matrix, and \( \mathbf{D}(\mathbf{S}^j) = \{ \mathbf{e}(s^j_1), \cdots, \mathbf{e}(s^j_b) \} \in \mathbb{R}^{m \times b} \) be a selection matrix, where \( \mathbf{e}(k) \) is the standard basis vector with a 1 in the \( k \)-th position and 0 elsewhere. The factorization is given by:
+                <br><br>
+                <span style="display:block; text-align:center;">
+                  \( \mathbf{R} = \prod_{i=1}^c \left( \underbrace{ \mathbf{I}_m + \mathbf{D}(\mathbf{S}^i) \cdot (\tilde{\mathbf{G}}_i - \mathbf{I}_b) \cdot \mathbf{D}(\mathbf{S}^i)^\top }_{ \mathbf{G}_i\text{: The } i\text{-th primitive orthogonal matrix} } \right), \quad \text{s.t.}~ \tilde{\mathbf{G}}_i^\top \tilde{\mathbf{G}}_i = \tilde{\mathbf{G}}_i \tilde{\mathbf{G}}_i^\top = \mathbf{I}_b,~\forall i \)
+                </span>
+                <br>
+                where \( \mathbf{D}(\mathbf{S}^i) \cdot (\mathbf{A}) \cdot \mathbf{D}(\mathbf{S}^i)^\top \) is a projector that replaces the \( b \times b \) sub-block with \( \mathbf{A} \). \( \mathbf{I}_m \) and \( \mathbf{I}_b \) are identity matrices of size \( m \times m \) and \( b \times b \), respectively. To efficiently parameterize small orthogonal matrices \( \tilde{\mathbf{G}}_i \), we can use the CNP introduced in the next section.
+              </li>
+              <li>
+                <strong>Block-stochastic SPO.</strong> While fully stochastic SPO is simple, it may fail to transform all neuron dimensions because the identity matrix leaves part of the space unchanged. To address this, we propose block-stochastic SPO, which first constructs a block-diagonal orthogonal matrix with small blocks for parameter efficiency, and then applies a random permutation to enhance expressiveness by randomizing the sparsity pattern. Block-stochastic SPO transforms all neuron dimensions simultaneously. Formally, we have:
+                <br><br>
+                <span style="display:block; text-align:center;">
+                  \( \mathbf{R} = \prod_{i=1}^c \left( \underbrace{ \mathbf{\Psi}_i^\top \cdot \mathrm{Diag}(\tilde{\mathbf{G}}^1_i, \tilde{\mathbf{G}}^2_i, \cdots, \tilde{\mathbf{G}}^{\lceil m/b \rceil}_i) \cdot \mathbf{\Psi}_i }_{ \mathbf{G}_i\text{: The } i\text{-th primitive orthogonal matrix} } \right), \quad \text{s.t.}~ (\tilde{\mathbf{G}}_i^j)^\top \tilde{\mathbf{G}}_i^j = \tilde{\mathbf{G}}_i^j (\tilde{\mathbf{G}}_i^j)^\top = \mathbf{I}_b,~\forall i, j \)
+                </span>
+                <br>
+                where \( \tilde{\mathbf{G}}^j_i \in \mathbb{R}^{b \times b} \) is the \( j \)-th block of the block diagonal matrix, and \( \mathbf{\Psi}_i, \forall i \) are all random permutation matrices. As long as each diagonal block \( \tilde{\mathbf{G}}^j_i \) is an orthogonal matrix, both \( \mathbf{G}_i \) and \( \mathbf{R} \) are also orthogonal matrices. We also use CNP to efficiently parameterize each orthogonal block \( \tilde{\mathbf{G}}^j_i \).
+              </li>
+              <li>
+                <strong>Cayley-Neumann Parameterization (CNP)</strong>
+                <p>
+                  The classic Cayley parameterization generates an orthogonal matrix \(\mathbf{R}\) in the form of \(\mathbf{R}=(\mathbf{I}+\mathbf{Q})(\mathbf{I}-\mathbf{Q})^{-1}\) where \(\mathbf{Q}\) is a skew-symmetric matrix satisfying \(\mathbf{Q}=-\mathbf{Q}^\top\). A minor caveat of this parameterization is that it only produces orthogonal matrices with determinant \(1\) (i.e., elements of the special orthogonal group), but empirical results in Orthogonal Finetuning (OFT) indicate that this constraint does not hurt performance. However, the matrix inverse in the original Cayley parameterization introduces numerical instability and computational overhead, limiting its scalability to large orthogonal matrices. To address this, we approximate the matrix inverse using a truncated Neumann series:
+                </p>
+                \begin{equation}\label{eq:cnp}
+                  \mathbf{R}=(\mathbf{I}+\mathbf{Q})(\mathbf{I}-\mathbf{Q})^{-1}=(\mathbf{I}+\mathbf{Q})\cdot\big(\sum_{i=0}^\infty \mathbf{Q}^i \big) \approx (\mathbf{I}+\mathbf{Q})\cdot\big(\mathbf{I}+\sum_{i=1}^k \mathbf{Q}^i \big),
+                \end{equation}
+                <p>
+                  where a larger number of approximation terms \(k\) leads to a smaller approximation error. By avoiding matrix inversion, the training stability of POET is improved; however, this comes with a price--the approximation is valid only when the Neumann series converges in the operator norm. To initialize orthogonal matrices as identity, we set \(\mathbf{Q}\) to a zero matrix in CNP, satisfying the convergence condition initially. As the training progresses, however, updates to \(\mathbf{Q}\) may cause its operator norm to exceed \(1\), violating this condition. Fortunately, our merge-then-reinitialize trick mitigates this issue by periodically resetting \(\mathbf{Q}\) to a zero matrix, ensuring its operator norm remains small.
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  </div>
+</section>
+
+
+
+
+<!-- BUILDING SECTION -->
+<section class="hero is-light is-small">
+  <div class="hero-body has-text-centered">
+    <h1 class="title is-1 mmmu">Energy- and Spectrum-Preserving Training</h1>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <!-------------------------------------------------------------------- RESULTS SECTION -------------------------------------------------------------------->
+    <section class="section">
+      <div class="container">
+        <div class="columns is-centered has-text-centered">
+          <div class="column is-four-fifths">
+            <h2 class="title is-3">Neuron Initialization</h2>
+            <div class="content has-text-justified">
+              <p>
+                Since POET preserves the spectral properties of the initial weight matrix 
+                \( \mathbf{W}_0 \), the choice of initialization plays a critical role. 
+                We propose to use the <em>normalized Gaussian initialization</em>, which normalizes neurons drawn from a zero-mean Gaussian with fixed variance.
+                We empirically compare different random initialization schemes for POET in the following table. Results show that the normalized Gaussian initialization leads to the best final performance, confirming that preserving both hyperspherical energy and the spectrum achieves great training performance.
+              </p>
+              <div style="display: flex; justify-content: center; margin-top: 1em;">
+                <table style="width: 350px; border-collapse: collapse;">
+                  <thead>
+                    <tr>
+                      <th style="border-bottom: 2px solid #888; padding: 6px 16px;"><b>Scheme</b></th>
+                      <th style="border-bottom: 2px solid #888; padding: 6px 16px;"><b>Perplexity</b></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style="padding: 6px 16px;">Standard</td>
+                      <td style="padding: 6px 16px;">26.22</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 16px;">Xavier</td>
+                      <td style="padding: 6px 16px;">25.79</td>
+                    </tr>
+                    <tr style="background-color: #f5f7fa;">
+                      <td style="padding: 6px 16px;">Uniform Spectrum</td>
+                      <td style="padding: 6px 16px;">27.29</td>
+                    </tr>
+                    <tr style="background-color: #f5f7fa;">
+                      <td style="padding: 6px 16px;">Normalized Gaussian</td>
+                      <td style="padding: 6px 16px;"><b>25.37</b></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="columns is-centered has-text-centered">
+          <div class="column is-four-fifths">
+            <h2 class="title is-3">Hyperspherical Energy in Training</h2>
+            <div class="content has-text-justified">
+              <p>
+                Hyperspherical energy \( \mathrm{HE}(\cdot) \) characterizes the uniformity of neurons on a unit hypersphere. Orthogonal trainin with \( \hat{\mathbf{w}}_i = \mathbf{w}_i / \|\mathbf{w}_i\| \) ensures the preservation of hyperspherical energy during training:
+              </p>
+              <br>
+              <div style="margin-top:-4mm; margin-bottom:-4.4mm;">
+                <div style="font-size:small;">
+                  \[
+                    \text{HE}(\mathbf{W}_0):=\sum_{i\neq j}\left\| \hat{\mathbf{w}}^0_i-\hat{\mathbf{w}}^0_j \right\|^{-1}
+                    =\sum_{i\neq j}\left\| \mathbf{R}\hat{\mathbf{w}}_i-\mathbf{R}\hat{\mathbf{w}}_j \right\|^{-1}
+                    =:\text{HE}(\mathbf{W}^R),
+                  \]
+                </div>
+              </div>
+              <br>
+              <p>
+                Prior work has shown that energy-preserving training can effectively improve generalization.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="columns is-centered has-text-centered">
+          <div class="column is-four-fifths">
+            <h2 class="title is-3">POET with Normalized Gaussian Initialization Preserves both Energy and Spectrum</h2>
+            <div class="content has-text-justified">
+              <p>
+                Under zero-mean isotropic Gaussian initialization, spectrum-preserving training and energy-preserving training can be achieved simultaneously by POET. It also partially explains why the proposed normalized Gaussian initialization achieves the best performance (Proof in the Appendix B).
+              </p>
+              <div class="content has-text-centered">
+                <img src="static/images/energy_spectrum.png" alt="algebraic reasoning" class="center" style="width: 70%; height: auto;">
+                <p>
+                  The relationship between POET, spectrum-preserving training and energy-preserving training.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+    </section>
+    </div>
+  </section>
 
 
 <!-- BUILDING SECTION -->
@@ -500,10 +611,34 @@
       <div class="container">
         <div class="columns is-centered has-text-centered">
           <div class="column is-four-fifths">
+            <h2 class="title is-3">Understanding POET Training</h2>
+            <div class="content has-text-justified">
+              <p>
+                To better understand how POET functions, we employ <em>vector probing</em> to analyze the learning dynamics of the orthogonal matrices. Vector probing evaluates an orthogonal matrix \( \mathbf{R} \) using a fixed, randomly generated unit vector \( \mathbf{v} \) by computing \( \mathbf{v}^\top \mathbf{R} \mathbf{v} \), which corresponds to the cosine similarity between \( \mathbf{R}\mathbf{v} \) and \( \mathbf{v} \). By inspecting the cosine similarities of seven orthogonal matrices throughout training, we observe that the learning process can be divided into three distinct phases (see Figure&nbsp;1):
+                <ol>
+                  <li>
+                    <em>Conical shell searching:</em> The cosine starts at 1 (i.e., \( \mathbf{R} \) is the identity) and gradually converges to a stable range of [0.6, 0.65], which we observe consistently across all learnable orthogonal matrices. This suggests that \( \mathbf{R} \) transforms \( \mathbf{v} \) into a thin conical shell around its original direction.
+                  </li>
+                  <li>
+                    <em>Stable learning on the conical shell:</em> The cosine remains within this range while the model begins to learn stably. Despite the cosine plateauing, validation perplexity continues to improve almost linearly.
+                  </li>
+                  <li>
+                    <em>Final adjusting:</em> Learning slows and eventually halts as the learning rate approaches zero.
+                  </li>
+                </ol>
+                We provide an in-depth discussion and empirical results in the Appendix.
+              </p>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="columns is-centered has-text-centered">
+          <div class="column is-four-fifths">
             <h2 class="title is-3">Connection to Generalization Theory</h2>
             <div class="content has-text-justified">
               <p>
-                Several previous works generalization results based on bounding the spectral norm of weight matrices. In particular, the spectrally-normalized margin analysis from Bartlett et al. bounds the misclassification error in terms of a margin-based training loss and a complexity term. The complexity term is proportional to 
+                Several previous works on generalization based on bounding the spectral norm of weight matrices. In particular, the spectrally-normalized margin analysis from Bartlett et al. bounds the misclassification error in terms of a margin-based training loss and a complexity term. The complexity term is proportional to 
                 \( Q/(\gamma n) \) where \( \gamma \) and \( n \) are margin and sample size and \( Q \)
                 bounds the spectral complexity. For an \( L \)-layer ReLU MLP
                 and maximal width \( d \), \( Q \) is bounded by
@@ -600,13 +735,10 @@
             </div>
           </div>
         </div>
-
       </div>
     </section>
     </div>
   </section>
-
-
 
 
 <!-- @PAN TODO: bibtex -->
@@ -621,6 +753,25 @@
         year={2025}
       }
     </code></pre>
+  </div>
+</section>
+
+<!-- References Section -->
+<section class="section" id="references">
+  <div class="container is-max-desktop content">
+    <h2 class="title is-3 has-text-centered">References</h2>
+    <ol>
+      <li>
+        Bartlett, P. L., Foster, D. J., & Telgarsky, M. J. (2017). Spectrally-normalized margin bounds for neural networks. In Advances in Neural Information Processing Systems (pp. 6240-6249).
+      </li>
+      <li>
+        Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, L., ... & Chen, W. (2021). LoRA: Low-Rank Adaptation of Large Language Models. arXiv preprint arXiv:2106.09685.
+      </li>
+      <li>
+        Qiu, Z., Buchholz, S., Xiao, T. Z., Dax, M., Schölkopf, B., & Liu, W. (2025). Reparameterized LLM Training via Orthogonal Equivalence Transformation. arXiv preprint arXiv:2506.08001.
+      </li>
+      <!-- Add more references as needed -->
+    </ol>
   </div>
 </section>
 
