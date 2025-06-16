@@ -498,7 +498,7 @@
 <!-- BUILDING SECTION -->
 <section class="hero is-light is-small">
   <div class="hero-body has-text-centered">
-    <h1 class="title is-1 mmmu">Energy- and Spectrum-Preserving Training</h1>
+    <h1 class="title is-1 mmmu">POET’s superior Performance Stems from Energy and Spectrum Preservation.</h1>
   </div>
 </section>
 
@@ -515,7 +515,7 @@
                 Since POET preserves the spectral properties of the initial weight matrix 
                 \( \mathbf{W}_0 \), the choice of initialization plays a critical role. 
                 We propose to use the <em>normalized Gaussian initialization</em>, which normalizes neurons drawn from a zero-mean Gaussian with fixed variance.
-                We empirically compare different random initialization schemes for POET in the following table. Results show that the normalized Gaussian initialization leads to the best final performance, confirming that preserving both hyperspherical energy and the spectrum achieves great training performance.
+                We empirically compare different random initialization schemes for POET in the following table. Results show that the normalized Gaussian initialization leads to the best final performance. We hypothesize that the reason for this favorable performance is that POET with normalized Gaussian initialization preserves both hyperspherical energy and the spectrum during training.
               </p>
               <div style="display: flex; justify-content: center; margin-top: 1em;">
                 <table style="width: 350px; border-collapse: collapse;">
@@ -554,7 +554,7 @@
             <h2 class="title is-3">Hyperspherical Energy in Training</h2>
             <div class="content has-text-justified">
               <p>
-                Hyperspherical energy \( \mathrm{HE}(\cdot) \) characterizes the uniformity of neurons on a unit hypersphere. Orthogonal trainin with \( \hat{\mathbf{w}}_i = \mathbf{w}_i / \|\mathbf{w}_i\| \) ensures the preservation of hyperspherical energy during training:
+                Hyperspherical energy \( \mathrm{HE}(\cdot) \) characterizes the uniformity of neurons on a unit hypersphere and can be used to characterize the neural representation of each layer. Orthogonal training [2,3] with \( \hat{\mathbf{w}}_i = \mathbf{w}_i / \|\mathbf{w}_i\| \) ensures the preservation of hyperspherical energy during training:
               </p>
               <br>
               <div style="margin-top:-4mm; margin-bottom:-4.4mm;">
@@ -568,7 +568,7 @@
               </div>
               <br>
               <p>
-                Prior work has shown that energy-preserving training can effectively improve generalization.
+                Prior work [2] has shown that energy-preserving training can effectively improve generalization.
               </p>
             </div>
           </div>
@@ -762,13 +762,13 @@
     <h2 class="title is-3 has-text-centered">References</h2>
     <ol>
       <li>
-        Bartlett, P. L., Foster, D. J., & Telgarsky, M. J. (2017). Spectrally-normalized margin bounds for neural networks. In Advances in Neural Information Processing Systems (pp. 6240-6249).
+        Liu, W., Lin, R., Liu, Z., Liu, L., Yu, Z., Dai, B., & Song, L. (2018). Learning towards minimum hyperspherical energy. Advances in neural information processing systems, 31.
       </li>
       <li>
-        Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, L., ... & Chen, W. (2021). LoRA: Low-Rank Adaptation of Large Language Models. arXiv preprint arXiv:2106.09685.
+        Liu, W., Lin, R., Liu, Z., Rehg, J. M., Paull, L., Xiong, L., ... & Weller, A. (2021). Orthogonal over-parameterized training. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (pp. 7251-7260).
       </li>
       <li>
-        Qiu, Z., Buchholz, S., Xiao, T. Z., Dax, M., Schölkopf, B., & Liu, W. (2025). Reparameterized LLM Training via Orthogonal Equivalence Transformation. arXiv preprint arXiv:2506.08001.
+        Qiu, Z., Liu, W., Feng, H., Xue, Y., Feng, Y., Liu, Z., ... & Schölkopf, B. (2023). Controlling text-to-image diffusion by orthogonal finetuning. Advances in Neural Information Processing Systems, 36, 79320-79362.
       </li>
       <!-- Add more references as needed -->
     </ol>
