@@ -241,7 +241,7 @@
             <h2 class="title is-3">Dynamics of Singular Spectrum</h2>
             <div class="content has-text-justified">
               <p>
-                Inspired by MUON [4], we conduct a spectral analysis by comparing the singular spectrum among AdamW, Muon and POET.
+                Inspired by Muon [4], we conduct a spectral analysis by comparing the singular spectrum among AdamW, Muon and POET.
                 We compute SVD entropy of the trained Llama-60M model at different iterations. The SVD entropy, defined as 
                 \( H(\boldsymbol{\sigma}) = \frac{1}{\log n} \sum_i \frac{\sigma_i^2}{\sum_j \sigma_j^2} \log \frac{\sigma_i^2}{\sum_j \sigma_j^2} \),
                 measures the diversity of singular values; higher entropy indicates a more uniform and diverse spectrum. As shown in Figure&nbsp;4, POET consistently maintains high spectral diversity throughout training, owing to its orthogonal equivalence transformation. Consistent with <a href="#references">[4]</a>, Muon also yields more diverse spectral updates than AdamW.
