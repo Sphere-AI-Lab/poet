@@ -231,7 +231,25 @@
                 <img src="static/images/sv_comp.png" alt="algebraic reasoning" class="center" style="width: 90%; height: auto;">
                 <p> Training dynamics of singular values of the same weight matrix in a LLaMA model using standard training (AdamW) and POET.</p>
               </div>
-              <br>
+
+            </div>
+          </div>
+        </div>
+
+        <div class="columns is-centered has-text-centered">
+          <div class="column is-four-fifths">
+            <h2 class="title is-3">Dynamics of Singular Spectrum</h2>
+            <div class="content has-text-justified">
+              <p>
+                Inspired by MUON [4], we conduct a spectral analysis by comparing the singular spectrum among AdamW, Muon and POET.
+                We compute SVD entropy of the trained Llama-60M model at different iterations. The SVD entropy, defined as 
+                \( H(\boldsymbol{\sigma}) = \frac{1}{\log n} \sum_i \frac{\sigma_i^2}{\sum_j \sigma_j^2} \log \frac{\sigma_i^2}{\sum_j \sigma_j^2} \),
+                measures the diversity of singular values; higher entropy indicates a more uniform and diverse spectrum. As shown in Figure&nbsp;4, POET consistently maintains high spectral diversity throughout training, owing to its orthogonal equivalence transformation. Consistent with <a href="#references">[4]</a>, Muon also yields more diverse spectral updates than AdamW.
+              </p>
+              <div class="content has-text-centered">
+                <img src="static/images/svd_entropy.png" alt="algebraic reasoning" class="center" style="width: 100%; height: auto;">
+                <p> Dynamics comparison of average singular value entropy (singular value diversity) between direct training (AdamW, Muon) and POET.</p>
+              </div>
               <p>
                 Our proposed POET has two key properties:
                 <ul>
@@ -769,6 +787,9 @@
       </li>
       <li>
         Qiu, Z., Liu, W., Feng, H., Xue, Y., Feng, Y., Liu, Z., ... & Schölkopf, B. (2023). Controlling text-to-image diffusion by orthogonal finetuning. Advances in Neural Information Processing Systems, 36, 79320-79362.
+      </li>
+      <li>
+        Liu, J., Su, J., Yao, X., Jiang, Z., Lai, G., Du, Y., ... & Yang, Z. (2025). Muon is Scalable for LLM Training. arXiv e-prints, arXiv-2502.
       </li>
       <!-- Add more references as needed -->
     </ol>
