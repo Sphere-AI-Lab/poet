@@ -200,11 +200,12 @@ def parse_args(args):
     parser.add_argument("--poet_use_rmsnorm", action="store_true")
     parser.add_argument("--poet_scale_mode", type=int, default=0)
 
+    # POET-XQ parameters
+    parser.add_argument("--weight_quant", action='store_true')
+    
     # disable ddp, single_gpu
     parser.add_argument("--single_gpu", default=False, action="store_true")
-    parser.add_argument("--benchmark", action="store_true", help="Run 100-iteration benchmark and exit")
-    parser.add_argument("--profile", action="store_true", help="Run profiling and exit")
-    
+
     args = parser.parse_args(args)
 
     args = args_utils.check_args_torchrun_main(args)
@@ -356,12 +357,7 @@ def main(args):
 
     # it doesn't matter which tokenizer we use, because we train from scratch
     # T5 tokenizer was trained on C4 and we are also training on C4, so it's a good choice
-    # tokenizer = AutoTokenizer.from_pretrained("t5-base", model_max_length=args.max_length)
-    tokenizer = AutoTokenizer.from_pretrained(
-        "google-t5/t5-base",
-        local_files_only=True,
-        model_max_length=args.max_length,
-    )
+    tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base", model_max_length=args.max_length)
 
     def preprocess_batched(batch):
         batch = tokenizer(

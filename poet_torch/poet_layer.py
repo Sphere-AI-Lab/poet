@@ -26,9 +26,6 @@ def chain_layer_x_checkpoint_mem_o2(x: torch.Tensor, Rin: torch.Tensor, weight: 
 def chain_layer_x_checkpoint(x: torch.Tensor, Rin: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor], Rout: torch.Tensor, block_size: int) -> torch.Tensor:
     return torch.ops.poet.chain_layer_checkpoint(x, Rin, weight, bias, Rout, block_size)
 
-def chain_layer_x_checkpoint_2lr(x: torch.Tensor, Rin: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor], Rout: torch.Tensor, block_size: int) -> torch.Tensor:
-    return torch.ops.poet.chain_layer_checkpoint_2lr(x, Rin, weight, bias, Rout, block_size)
-
 def chain_layer_x_checkpoint_q8(x: torch.Tensor, Rin: torch.Tensor, W_q: torch.Tensor, W_scales: torch.Tensor, W_zeros: torch.Tensor, group_size: int, b: Optional[torch.Tensor], Rout: torch.Tensor, bsz: int) -> torch.Tensor:
     return torch.ops.poet.chain_layer_checkpoint_q8(x, Rin, W_q, W_scales, W_zeros, group_size, b, Rout, bsz)
 
@@ -233,25 +230,13 @@ def forward_core(
 
     R_out, R_in = get_weight_poet(R, block_size, rows, cols, r_out, r_in) 
 
-    # base_weight = base_weight * scale.to(dtype=base_weight.dtype)
-
-    # Balance learning rates:
-    # If r_out > r_in, scale > 1.
-    # R_in (smaller) is multiplied by scale -> gradient boosted by scale.
-    # R_out (larger) is divided by scale -> gradient dampened by scale.
-    # scale = (r_out / r_in) ** 0.5
-    # R_in = R_in * scale
-    # R_out = R_out / scale
-
-    # balance mode
+    # POET-X fast
     # x = permute_x(x, perm_in_inv, perm_in)
     # y = chain_layer_x_pytorch(x, R_in, base_weight, base_bias, R_out, block_size)
-    # y = chain_layer_x_checkpoint(x, R_in, base_weight, base_bias, R_out, block_size)
-    # lower throughput but less memory (merge permute inside chain layer)
     # y = permute_x(x, perm_out, perm_out_inv)
     
+    # POET-X mem efficient
     y = chain_layer_x_checkpoint_mem_o2(x, R_in, base_weight, base_bias, R_out, perm_in_inv, perm_in, perm_out, perm_out_inv, block_size)
-
 
     return y
 
@@ -279,41 +264,15 @@ def forward_core_q8(
 
     R_out, R_in = get_weight_poet(R, block_size, rows, cols, r_out, r_in) 
 
+    # POET-X fast mode
     # x = permute_x(x, perm_in_inv, perm_in)
     # y = chain_layer_x_checkpoint_q8(x, R_in, W_q, W_scales, W_zeros, group_size, base_bias, R_out, block_size)
-    # # y = chain_layer_x_checkpoint_mem_o2_q8(x, R_in, W_q, W_scales, W_zeros, group_size, base_bias, R_out, perm_in_inv, perm_in, block_size)
     # y = permute_x(y, perm_out, perm_out_inv)
 
+    # POET-X mem efficient mode
     y = chain_layer_x_checkpoint_mem_o2_q8(x, R_in, W_q, W_scales, W_zeros, group_size, base_bias, R_out, perm_in_inv, perm_in, perm_out, perm_out_inv, block_size)
 
     return y
-
-
-# @torch.compile(fullgraph=True)
-# def forward_core(
-#     x: torch.Tensor, 
-#     R: torch.Tensor,
-#     block_size: int,
-#     rows: torch.Tensor,
-#     cols: torch.Tensor,
-#     perm_in: torch.Tensor, 
-#     perm_in_inv: torch.Tensor,
-#     perm_out: torch.Tensor,
-#     perm_out_inv: torch.Tensor,
-#     r_in: int,
-#     r_out: int,
-#     base_weight: torch.Tensor,
-#     base_bias: torch.Tensor,
-#     mem_efficient_mode: bool = False,
-# ) -> torch.Tensor:
-
-#     R_out, R_in = get_weight_poet(R, block_size, rows, cols, r_out, r_in) 
-
-#     # higher throughput but more memory
-#     x = permute_x(x, perm_in_inv, perm_in)
-#     y = chain_layer_x_pytorch(x, R_in, base_weight, base_bias, R_out, block_size) # y = x @ R @ W @ P
-#     y = permute_x(y, perm_out, perm_out_inv)
-#     return y
 
 
 class POETLinear(nn.Module):
@@ -344,31 +303,13 @@ class POETLinear(nn.Module):
         rows, cols = torch.triu_indices(bsz, bsz, 1, device=device)
         self.register_buffer('rows', rows.to(torch.int32))
         self.register_buffer('cols', cols.to(torch.int32))
-        # self.rows = rows.to(torch.int32)
-        # self.rows.requires_grad = False
-        # self.cols = cols.to(torch.int32)
-        # self.cols.requires_grad = False
 
-        group_size = 1
-        perm_in = torch.randperm(in_features // group_size, device=device, dtype=torch.int32)
-        perm_out = torch.randperm(out_features // group_size, device=device, dtype=torch.int32)
+        perm_in = torch.randperm(in_features, device=device, dtype=torch.int32)
+        perm_out = torch.randperm(out_features, device=device, dtype=torch.int32)
         self.register_buffer('perm_in', perm_in)
         self.register_buffer('perm_out', perm_out)
         self.register_buffer('perm_in_inv', torch.argsort(perm_in).to(torch.int32))
         self.register_buffer('perm_out_inv', torch.argsort(perm_out).to(torch.int32))
-        # self.perm_in = perm_in
-        # self.perm_in.requires_grad = False
-        # self.perm_out = perm_out
-        # self.perm_out.requires_grad = False
-        # self.perm_in_inv = torch.argsort(perm_in).to(torch.int32)
-        # self.perm_in_inv.requires_grad = False
-        # self.perm_out_inv = torch.argsort(perm_out).to(torch.int32)
-        # self.perm_out_inv.requires_grad = False
-
-        # self.reset_parameters()
-
-        # self.out_norm = nn.RMSNorm(out_features, eps=1e-6, elementwise_affine=True, device=device, dtype=dtype)
-        # self.log_scale = nn.Parameter(torch.zeros(1, device=device, dtype=dtype))
 
     def random_init_parameters(self):
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
@@ -383,31 +324,12 @@ class POETLinear(nn.Module):
 
     def perform_permutation(self) -> None:
         # Merge the self.linear.weight with permutations to avoid P_in.t() @ W_orig.t() @ P_out in the forward pass
-        # W_merged.t() = P_in.t() @ W_orig.t() @ P_out
-        # W_merged = P_out.t() @ W_orig @ P_in
-        # with torch.no_grad():
-        #     W = self.weight
-        #     Wp = W.index_select(0, self.perm_out_inv).index_select(1, self.perm_in_inv)
-        #     W.copy_(Wp)
-            # self.linear.weight.data = self.linear.weight.data.index_select(0, self.perm_out_inv)
-            # self.linear.weight.data = self.linear.weight.data.index_select(-1, self.perm_in_inv)
         W = self.weight
         Wp = W.index_select(0, self.perm_out_inv).index_select(1, self.perm_in_inv)
         self.weight.detach().copy_(Wp)
 
     def update_permutation(self):
         """Update the permutation of the indices."""
-        # with torch.no_grad():
-        #     device = self.linear.weight.device
-        #     perm_in = torch.randperm(self.in_features, device=device)
-        #     self.perm_in.copy_(perm_in)
-        #     self.perm_in_inv.copy_(torch.argsort(perm_in))
-        #     perm_out = torch.randperm(self.out_features, device=device)
-        #     self.perm_out.copy_(perm_out)
-        #     self.perm_out_inv.copy_(torch.argsort(perm_out))
-
-        #     self.perform_permutation()
-
         device = self.weight.device
         perm_in = torch.randperm(self.in_features, device=device)
         self.perm_in.copy_(perm_in)
@@ -418,40 +340,9 @@ class POETLinear(nn.Module):
 
         self.perform_permutation()
 
-        # merge the self.linear.weight with permutations to avoid P_in.t() @ W_orig.t() @ P_out in the forward pass
-        # W_merged.t() = P_in.t() @ W_orig.t() @ P_out
-        # W_merged = P_out.t() @ W_orig @ P_in
-        # W_orig = self.linear.weight.data
-        # W_orig = W_orig.index_select(0, self.perm_out_inv)
-        # W_orig = W_orig.index_select(-1, self.perm_in_inv)
-        # self.linear.weight.data.copy_(W_orig)  
-
     def merge_then_reinitialize_working(self) -> None:
         # with torch.no_grad():
         R_out, R_in = get_weight_poet(self.oft_R, self.block_size, self.rows, self.cols, self.r_out, self.r_in)
-        # R_out = torch.block_diag(*R_out)
-        # R_in = torch.block_diag(*R_in)
-
-        # self.undo_permutation()
-
-        # Recover the original weights by undoing permutation
-        # W_merged = P_out.t() @ W_orig @ P_in
-        # W_orig = P_out @ W_merged @ P_in.t()
-        # W_merged = self.linear.weight.data
-        # W_orig = W_merged.index_select(-1, self.perm_in)
-        # W_orig = W_orig.index_select(0, self.perm_out)
-
-        # y = x @ P_in @ R_in @ P_in.t() @ W_orig.t() @ P_out @ R_out @ P_out.t()
-        # W_merged.t() = P_in @ R_in @ P_in.t() @ W_orig.t() @ P_out @ R_out @ P_out.t()
-        # W_merged.t() = R_in_merged @ W_orig.t() @ R_out_merged
-        # R_in_merged = P_in @ R_in @ P_in.t()
-        # R_out_merged = P_out @ R_out @ P_out.t()
-        # R_in = R_in.index_select(-1, self.perm_in)
-        # R_in = R_in.index_select(0, self.perm_in)
-        # R_out = R_out.index_select(-1, self.perm_out)
-        # R_out = R_out.index_select(0, self.perm_out)
-        # W_final = (R_in @ W_orig.t() @ R_out).t()
-        # self.linear.weight.data.copy_(W_final)
 
         # y = x @ P_in @ R_in @ P_in.t() @ W_orig.t() @ P_out @ R_out @ P_out.t()
         # 1) P_in.t() @ W_orig.t() @ P_out
@@ -467,30 +358,6 @@ class POETLinear(nn.Module):
         
         # Transpose back to weight shape
         self.weight.detach().copy_(expected)
-
-        # tmp = self.weight.detach().clone()
-        # tmp = tmp.t()
-        # tmp = tmp.index_select(0, self.perm_in_inv)
-        # tmp = tmp.index_select(-1, self.perm_out_inv)
-        # tmp = block_diag_lr_matmul(R_in, tmp, R_out)
-        # tmp = tmp.index_select(0, self.perm_in)
-        # tmp = tmp.index_select(-1, self.perm_out)
-        # expected = tmp.t()
-
-        # W = self.weight.detach().clone()
-        # W = W.t()
-        # # P_in.t() @ W_orig.t() @ P_out
-        # W = W.index_select(0, self.perm_in_inv)
-        # W = W.index_select(1, self.perm_out_inv)
-        
-        # # R_in @ W.t() @ R_out
-        # W = block_diag_lr_matmul(R_in, W, R_out)
-        
-        # # P_in @ W.t() @ P_out.t()
-        # W = W.index_select(0, self.perm_in)
-        # W = W.index_select(1, self.perm_out)
-        # W = W.t()
-        # self.weight.detach().copy_(W)
 
         self.oft_R.zero_()
         self.update_permutation()
@@ -528,12 +395,10 @@ class POETLinear(nn.Module):
         self.oft_R.zero_()
 
     def forward(self, x):
-        # scale = torch.exp(torch.tanh(self.log_scale) * 0.2).to(x.device)
         x = forward_core(x, self.oft_R, self.block_size, self.rows, self.cols, 
                 self.perm_in, self.perm_in_inv, self.perm_out, self.perm_out_inv, 
                 self.r_in, self.r_out, self.weight, self.bias, self.mem_efficient_mode)
 
-        # x = self.out_norm(x)
         return x
 
 
@@ -583,29 +448,6 @@ class POETLinearNeurips(nn.Module):
     def merge_then_reinitialize(self) -> None:
         # with torch.no_grad():
         R_out, R_in = get_weight_poet(self.oft_R, self.block_size, self.rows, self.cols, self.r_out, self.r_in)
-        # R_out = torch.block_diag(*R_out)
-        # R_in = torch.block_diag(*R_in)
-
-        # self.undo_permutation()
-
-        # Recover the original weights by undoing permutation
-        # W_merged = P_out.t() @ W_orig @ P_in
-        # W_orig = P_out @ W_merged @ P_in.t()
-        # W_merged = self.linear.weight.data
-        # W_orig = W_merged.index_select(-1, self.perm_in)
-        # W_orig = W_orig.index_select(0, self.perm_out)
-
-        # y = x @ P_in @ R_in @ P_in.t() @ W_orig.t() @ P_out @ R_out @ P_out.t()
-        # W_merged.t() = P_in @ R_in @ P_in.t() @ W_orig.t() @ P_out @ R_out @ P_out.t()
-        # W_merged.t() = R_in_merged @ W_orig.t() @ R_out_merged
-        # R_in_merged = P_in @ R_in @ P_in.t()
-        # R_out_merged = P_out @ R_out @ P_out.t()
-        # R_in = R_in.index_select(-1, self.perm_in)
-        # R_in = R_in.index_select(0, self.perm_in)
-        # R_out = R_out.index_select(-1, self.perm_out)
-        # R_out = R_out.index_select(0, self.perm_out)
-        # W_final = (R_in @ W_orig.t() @ R_out).t()
-        # self.linear.weight.data.copy_(W_final)
 
         # y = x @ P_in @ R_in @ P_in.t() @ W_orig.t() @ P_out @ R_out @ P_out.t()
         # 1) P_in.t() @ W_orig.t() @ P_out
@@ -621,30 +463,6 @@ class POETLinearNeurips(nn.Module):
         
         # Transpose back to weight shape
         self.weight.detach().copy_(expected)
-
-        # tmp = self.weight.detach().clone()
-        # tmp = tmp.t()
-        # tmp = tmp.index_select(0, self.perm_in_inv)
-        # tmp = tmp.index_select(-1, self.perm_out_inv)
-        # tmp = block_diag_lr_matmul(R_in, tmp, R_out)
-        # tmp = tmp.index_select(0, self.perm_in)
-        # tmp = tmp.index_select(-1, self.perm_out)
-        # expected = tmp.t()
-
-        # W = self.weight.detach().clone()
-        # W = W.t()
-        # # P_in.t() @ W_orig.t() @ P_out
-        # W = W.index_select(0, self.perm_in_inv)
-        # W = W.index_select(1, self.perm_out_inv)
-        
-        # # R_in @ W.t() @ R_out
-        # W = block_diag_lr_matmul(R_in, W, R_out)
-        
-        # # P_in @ W.t() @ P_out.t()
-        # W = W.index_select(0, self.perm_in)
-        # W = W.index_select(1, self.perm_out)
-        # W = W.t()
-        # self.weight.detach().copy_(W)
 
         self.oft_R.zero_()
         self.update_permutation()
@@ -710,28 +528,17 @@ class POETLinearNeurips(nn.Module):
 
         # y = x @ W_new.t()
         # W_new = P_out @ R_out @ P_out.t() @ W @ P_in @ R_in @ P_in.t()
-        # Kernel calculation for Inner = (P_out^T @ W) @ P_in
+        # Calculation for Inner = (P_out^T @ W) @ P_in
         temp_W1_kernel = self.weight.index_select(0, self.perm_out_inv)
         Inner = temp_W1_kernel.index_select(1, self.perm_in_inv)
-        # temp_W1_kernel = PermuteMatrixFunction.apply(self.weight, self.perm_out_inv, 0) # P_out^T @ W
-        # Inner = PermuteMatrixFunction.apply(temp_W1_kernel, self.perm_in_inv, 1) # Inner = (P_out^T @ W) @ P_in
 
-        # tmp =self.matmul_R_left(R_left, Inner.unsqueeze(0)) # R_left @ Inner
-        # Outer = self.matmul_R_right(tmp, R_right).squeeze() # Outer = (R_left @ Inner) @ R_right
-        # Outer = block_diag_lr_matmul(R_left, Inner, R_right)
         R_left_bs = torch.block_diag(*R_left)
         R_right_bs = torch.block_diag(*R_right)
         Outer = R_left_bs @ Inner @ R_right_bs
 
-        # Kernel calculation for Final = (P_out @ Outer) @ P_in^T
+        # Calculation for Final = (P_out @ Outer) @ P_in^T
         temp_Outer_kernel = Outer.index_select(0, self.perm_out)
         transformed_weight = temp_Outer_kernel.index_select(1, self.perm_in)
-        # temp_Outer_kernel = PermuteMatrixFunction.apply(Outer, self.perm_out, 0) # P_out @ Outer
-        # transformed_weight = PermuteMatrixFunction.apply(temp_Outer_kernel, self.perm_in, 1) # (P_out @ Outer) @ P_in^T
-
-        # x = forward_core(x, self.oft_R, self.block_size, self.rows, self.cols, 
-        #         self.perm_in, self.perm_in_inv, self.perm_out, self.perm_out_inv, 
-        #         self.r_in, self.r_out, self.weight, self.bias)
 
         return F.linear(x, transformed_weight.squeeze(), self.bias)
 
@@ -756,12 +563,6 @@ class QPOETLinear(nn.Module):
         torch.cuda.empty_cache()
 
         self.weight = nn.Parameter(int8_weight, requires_grad=False).to(device) # Only Tensors of floating point and complex dtype can require gradients, using float_gradient to store the gradient
-        # self.weight.__setattr__('scales', scales.to(device))
-        # self.weight.__setattr__('zeros', zeros.to(device))
-        # self.weight.__setattr__('group_size', group_size)
-        # self.weight.__setattr__('saved_data_dtype', int8_weight.dtype)
-        # self.weight.__setattr__('stochastic_round', stochastic_round)
-        # self.weight.__setattr__('num_bits', num_bits)
         self.register_buffer('weight_scales', scales.to(device))
         self.register_buffer('weight_zeros', zeros.to(device))
         self.weight_group_size = group_size
@@ -778,11 +579,6 @@ class QPOETLinear(nn.Module):
         self.out_features = self.weight.shape[0]
         self.block_size = bsz
         self.mem_efficient_mode = mem_efficient_mode
-
-        # if bias:
-        #     self.bias = nn.Parameter(torch.empty(out_features, device=device, dtype=dtype), requires_grad=False)
-        # else:
-        #     self.register_parameter("bias", None)
 
         # Trainable skew-params per block (same as POETLinear)
         r_in = self.in_features // bsz
@@ -816,42 +612,16 @@ class QPOETLinear(nn.Module):
         w = (w - self.weight_zeros.to(dtype)) * self.weight_scales.to(dtype)
         return w.reshape(self.weight.shape)
 
-    # @torch.no_grad()
-    # def perform_permutation(self) -> None:
-    #     # IMPORTANT: dequantize -> permute in float -> requantize (permutes invalidate old scales/zeros)
-    #     #  W = self._dequantize_to(dtype=self.oft_R.dtype)
-    #     Wp = W.index_select(0, self.perm_out_inv).index_select(1, self.perm_in_inv)
-    #     # self._requantize_from_float(Wp)
-
-    # @torch.no_grad()
-    # def update_permutation(self):
-    #     device = self.weight.device
-    #     perm_in = torch.randperm(self.in_features, device=device).to(torch.int32)
-    #     self.perm_in.copy_(perm_in)
-    #     self.perm_in_inv.copy_(torch.argsort(perm_in).to(torch.int32))
-    #     perm_out = torch.randperm(self.out_features, device=device).to(torch.int32)
-    #     self.perm_out.copy_(perm_out)
-    #     self.perm_out_inv.copy_(torch.argsort(perm_out).to(torch.int32))
-    #     self.perform_permutation()
-
-
     @torch.no_grad()
     def merge_then_reinitialize(self) -> None:
         # Same math as POETLinear.merge_then_reinitialize, but float compute + requantize
         R_out, R_in = get_weight_poet(self.oft_R, self.block_size, self.rows, self.cols, self.r_out, self.r_in)
 
-        # print(f"1. R_in device: {R_in.device}, R_out device: {R_out.device}")
-
-        # print(f"Starting merge_then_reinitialize with W dtype: {self.weight.dtype}")
-
         # Step 1-4: Merge adapters (same as before)
         W = self._dequantize_to(dtype=self.oft_R.dtype)
 
-        # print(f"2. After dequantize, W dtype: {W.dtype}")
-        # print(f"2. After dequantize, W device: {W.device}")
         tmp = W.t()
         tmp = block_diag_lr_matmul(R_in, tmp, R_out)
-        # print(f"3. After block_diag_lr_matmul, tmp device: {tmp.device}")
         tmp = tmp.index_select(0, self.perm_in)
         tmp = tmp.index_select(1, self.perm_out)
         expected = tmp.t()
@@ -866,11 +636,9 @@ class QPOETLinear(nn.Module):
         # Step 6: Apply NEW permutation to the float weight
         # This undoes OLD perm and applies NEW perm in one step
         expected = expected.index_select(0, perm_out_inv).index_select(1, perm_in_inv)
-        # print(f"4. After permutation, expected device: {expected.device}")
         
         # Step 7: Quantize (only once, with correct NEW perm)
         self._requantize_from_float(expected)
-        # print(f"5. After requantize, weight device: {self.weight.device}")
         
         # Step 8: Update buffers to match the quantized weight
         self.perm_in.copy_(perm_in)
@@ -999,110 +767,6 @@ def prepare_model_for_int8_training_poet(model, args, target_module):
 
     return model
 
-# def prepare_model_for_int8_training_poet(model, args, target_module):
-#     is_dist = dist.is_available() and dist.is_initialized()
-#     rank = dist.get_rank() if is_dist else 0
-
-#     for name, module in reversed(list(model._modules.items())):
-#         if len(list(module.children())) > 0:
-#             model._modules[name] = prepare_model_for_int8_training_poet(module, args, target_module)
-
-#         if isinstance(module, nn.Linear):
-#             if name not in target_module:
-#                 continue
-
-#             # choose a CUDA device for NCCL broadcast
-#             bcast_device = torch.device("cuda", torch.cuda.current_device()) if torch.cuda.is_available() else module.weight.device
-
-#             # (optional) do init normalization only on rank0, since we broadcast the quantized result
-#             if rank == 0:
-#                 with torch.no_grad():
-#                     if getattr(args, "init_type", None) == "normalized":
-#                         module.weight.data = module.weight.data / torch.norm(module.weight.data, dim=1, keepdim=True)
-#                     elif getattr(args, "init_type", None) == "mup_normalized":
-#                         w = module.weight.data
-#                         w = w / torch.norm(w, dim=1, keepdim=True)
-#                         module.weight.data = w * float(getattr(args, "mup_alpha", 1.0))
-
-#             # --- rank0 quantizes, others receive ---
-#             group_size = args.weight_group_size
-#             w_shape = module.weight.shape
-#             num_groups = module.weight.numel() // group_size
-
-#             if is_dist:
-#                 if rank == 0:
-#                     w_float = module.weight.data.to(bcast_device)
-#                     q, scales, zeros = _quantize_tensor_int8(w_float, q_group_size=group_size)
-#                     q = q.to(bcast_device)
-#                     scales = scales.to(bcast_device)
-#                     zeros = zeros.to(bcast_device)
-#                     bias_t = (module.bias.data.to(bcast_device) if module.bias is not None else torch.empty(0, device=bcast_device, dtype=w_float.dtype))
-#                 else:
-#                     q = torch.empty(w_shape, device=bcast_device, dtype=torch.uint8)
-#                     scales = torch.empty((num_groups, 1), device=bcast_device, dtype=module.weight.dtype)
-#                     zeros = torch.empty((num_groups, 1), device=bcast_device, dtype=module.weight.dtype)
-#                     bias_t = torch.empty((w_shape[0],), device=bcast_device, dtype=module.weight.dtype) if module.bias is not None else torch.empty(0, device=bcast_device, dtype=module.weight.dtype)
-
-#                 dist.broadcast(q, src=0)
-#                 dist.broadcast(scales, src=0)
-#                 dist.broadcast(zeros, src=0)
-#                 if module.bias is not None:
-#                     dist.broadcast(bias_t, src=0)
-#             else:
-#                 # single-process fallback
-#                 q, scales, zeros = _quantize_tensor_int8(module.weight.data, q_group_size=group_size)
-#                 bias_t = module.bias.data if module.bias is not None else None
-
-#             new_layers = QPOETLinear(
-#                 module.weight,
-#                 (bias_t if module.bias is not None else None),
-#                 num_bits=args.weight_bits,
-#                 group_size=args.weight_group_size,
-#                 stochastic_round=args.stochastic_round,
-#                 device=bcast_device,                  # important for NCCL broadcast path
-#                 dtype=getattr(module.weight, "dtype", None),
-#                 prequantized=is_dist,                 # if dist: we already have q/scales/zeros
-#                 int8_weight=q if is_dist else None,
-#                 scales=scales if is_dist else None,
-#                 zeros=zeros if is_dist else None,
-#             )
-#             model._modules[name] = new_layers
-
-#     return model
-
-# def replace_linear_with_poet(module: nn.Module, block_size: int, init_type: str, device=None, dtype=None) -> int:
-#     def _convert(m: nn.Module, parent_name=''):
-#         for name, child in list(m.named_children()):
-#             full_name = f"{parent_name}.{name}" if parent_name else name
-            
-#             if isinstance(child, nn.Linear):
-#                 # Skip embedding and lm_head layers
-#                 if 'embed' in full_name.lower() or 'lm_head' in full_name.lower():
-#                     continue
-                    
-#                 if block_size and child.in_features % block_size == 0 and child.out_features % block_size == 0:
-#                     new_lin = POETLinear(
-#                         in_features=child.in_features,
-#                         out_features=child.out_features,
-#                         bsz=block_size,
-#                         bias=(child.bias is not None),
-#                         device=device,
-#                         dtype=dtype,
-#                     )
-#                     with torch.no_grad():
-#                         if init_type == 'normalized':
-#                             child.weight.data = child.weight.data / torch.norm(child.weight.data, dim=1, keepdim=True)
-#                         new_lin.weight.copy_(child.weight.detach().to(new_lin.weight.dtype))
-#                         if child.bias is not None and new_lin.bias is not None:
-#                             new_lin.bias.copy_(child.bias.detach().to(new_lin.bias.dtype))
-#                     setattr(m, name, new_lin)
-#                 else:
-#                     continue
-#             else:
-#                 _convert(child, full_name)
-#     _convert(module)
-
-
 def check_and_merge(model: nn.Module, iter_count=0, poet_reset_gap=4):
     if iter_count <= 0 or (iter_count % poet_reset_gap != 0):
         return
@@ -1166,23 +830,6 @@ def get_grad_clipping_value(global_step, grad_clipping, warmup_steps, period_T, 
     # Linear warmup from min_ratio * grad_clipping to grad_clipping
     warmup_factor = min_ratio + (1.0 - min_ratio) * (cycle_position / max(1, warmup_steps))
     return warmup_factor * grad_clipping
-
-
-
-def _find_module_by_name_substr(model: nn.Module, name_substr: str):
-    for n, m in model.named_modules():
-        if name_substr in n:
-            return n, m
-    return None, None
-
-
-def _blockdiag_matvec(blocks: torch.Tensor, vec: torch.Tensor, transpose: bool) -> torch.Tensor:
-    # blocks: (r, b, b), vec: (r*b,)
-    r, b, _ = blocks.shape
-    v = vec.view(r, b)
-    A = blocks.transpose(-1, -2) if transpose else blocks
-    out = torch.einsum("rbc,rc->rb", A, v)
-    return out.reshape(r * b)
 
 
 @torch.no_grad()

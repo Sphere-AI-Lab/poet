@@ -4,14 +4,8 @@
 module load cuda/12.9
 conda activate poet
 
-# Resolve repo root and source wandb_api.sh from there
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "$SCRIPT_DIR")"
-
-[ -f "$REPO_ROOT/wandb_api.sh" ] && source "$REPO_ROOT/wandb_api.sh"
-
-torchrun --standalone --nproc_per_node 8 torchrun_main_normalized.py \
-    --model_config configs/llama_3b_oft.json \
+torchrun --standalone --nproc_per_node 8 torchrun_main.py \
+    --model_config configs/llama_3b.json \
     --lr 0.001 \
     --batch_size 64 \
     --total_batch_size 256 \
