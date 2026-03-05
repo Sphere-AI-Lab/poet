@@ -5,7 +5,7 @@ import random
 import argparse
 import numpy as np
 from datetime import datetime
-
+import glob
 import torch
 import torch.nn as nn
 import torch.utils.data
@@ -41,14 +41,12 @@ import bitsandbytes as bnb
 
 from poet_torch import (
     POETAdamW, 
-    POETAdamWContinuous,
     replace_linear_with_poet, 
     check_and_merge, 
     get_grad_clipping_value, 
     prepare_model_for_int8_training_poet, 
     QPOETLinear,
 )
-from poet_torch.q_poet_adamw8bit import AdamW8bit as POETAdamW8bit
 from MUON.muon_optimized import MuonOptimized
 
 transformers.logging.set_verbosity_error()
@@ -71,15 +69,14 @@ def load_local_data(split='train', max_samples=None, seed=42):
     })
     
     data_dir = "./c4/en"
-    import glob
-
     cache_dir = "/tmp/c4"
     
     # Get all available files
     all_files = sorted(glob.glob(os.path.join(data_dir, f"c4-{split}.*.json.gz")))
     
     if not all_files:
-        raise ValueError(f"No files found in {data_dir} matching c4-{split}.*.json.gz")
+        logger.warning(f"No files found in {data_dir}, falling back to streaming")
+        return None
     
     # Use deterministic file order based on seed
     random.seed(seed)
@@ -310,7 +307,7 @@ def main(args):
             scale_str = f"{args.num_training_steps}steps"
 
         # allow env/CLI override; fall back to composed name
-        project_name = os.environ.get("WANDB_PROJECT", f"sPOET-{model_stem}-{scale_str}")
+        project_name = os.environ.get("WANDB_PROJECT", f"sPOET-{model_stem}-{scale_str}-public")
         project_name = getattr(args, "wandb_project", None) or project_name
 
         group_name = os.environ.get("WANDB_RUN_GROUP", None)
@@ -361,7 +358,7 @@ def main(args):
     # T5 tokenizer was trained on C4 and we are also training on C4, so it's a good choice
     # tokenizer = AutoTokenizer.from_pretrained("t5-base", model_max_length=args.max_length)
     tokenizer = AutoTokenizer.from_pretrained(
-        "/lustre/fast/fast/zqiu/hf_models/t5-base",
+        "google-t5/t5-base",
         local_files_only=True,
         model_max_length=args.max_length,
     )
@@ -611,7 +608,6 @@ def main(args):
     elif args.optimizer.lower() == "adam8bit":
         optimizer = bnb.optim.Adam8bit(trainable_params, lr=args.lr, weight_decay=args.weight_decay)
     elif args.optimizer.lower() == "q_poet":
-        # optimizer = POETAdamW8bit(param_groups, lr=args.lr, weight_decay=args.weight_decay)
         optimizer = POETAdamW(param_groups, lr=args.lr, weight_decay=args.weight_decay, poet_block_size=args.poet_block_size)
     
     else:

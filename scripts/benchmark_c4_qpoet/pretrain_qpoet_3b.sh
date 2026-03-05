@@ -10,9 +10,7 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || echo 
 
 [ -f "$REPO_ROOT/wandb_api.sh" ] && source "$REPO_ROOT/wandb_api.sh"
 
-# export WANDB_MODE="offline"
-
-torchrun --standalone --nproc_per_node 4 torchrun_main_normalized.py \
+torchrun --standalone --nproc_per_node 8 torchrun_main_normalized.py \
     --model_config configs/llama_3b_oft.json \
     --lr 0.001 \
     --batch_size 64 \

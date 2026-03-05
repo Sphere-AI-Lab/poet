@@ -1,0 +1,28 @@
+# Dataset
+c4/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Checkpoints & outputs
+*.pt
+*.pth
+*.ckpt
+checkpoints/
+outputs/
+
+# Logs & wandb
+wandb/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env
+*.env

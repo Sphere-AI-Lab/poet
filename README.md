@@ -15,6 +15,35 @@
 
 ---
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Installation](#installation)
+- [Data Preparation](#data-preparation)
+- [Usage](#usage)
+  - [POET — LLM Pretraining](#poet--llm-pretraining)
+  - [POET-X — Memory-Efficient Large-Scale Training](#poet-x--memory-efficient-large-scale-training)
+  - [Training Script](#training-script)
+  - [Merge Weights for Inference](#merge-weights-for-inference)
+- [POET](#poet)
+  - [Method](#method)
+  - [Spectral Diversity](#spectral-diversity)
+  - [Energy & Spectrum Preservation](#energy--spectrum-preservation)
+  - [Efficient Approximation: SPO](#efficient-approximation-stochastic-primitive-optimization-spo)
+  - [Results](#results)
+- [POET-X](#poet-x)
+  - [Overview](#overview-1)
+  - [Key Results](#key-results)
+  - [Pretraining Results](#pretraining-results)
+  - [Memory Efficiency](#memory-efficiency)
+  - [Throughput & Distributed Scaling](#throughput--distributed-scaling)
+  - [Method: Key Optimizations](#method-key-optimizations)
+  - [POET-X Variants](#poet-x-variants)
+- [Citation](#citation)
+- [Related Work](#related-work)
+
+---
+
 ## Overview
 
 This repository contains the official implementation of **POET** and **POET-X** — a family of reparameterized LLM training algorithms that optimize weight matrices through **Orthogonal Equivalence Transformation (OET)**, achieving superior generalization with provably bounded weight spectra.
@@ -23,6 +52,119 @@ This repository contains the official implementation of **POET** and **POET-X** 
   <img src="assets/poet/teaser_poet.png" alt="POET three learning phases" width="85%">
   <br><em>POET's three learning phases: conical shell searching → stable learning → final adjusting.</em>
 </p>
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/Sphere-AI-Lab/poet.git
+cd poet
+pip install -e .
+```
+
+**Requirements:**
+- Python ≥ 3.9
+- PyTorch ≥ 2.0
+- CUDA ≥ 11.8
+- Triton ≥ 2.0 (for POET-X fused kernels)
+
+---
+
+## Data Preparation
+
+The training scripts expect the C4 dataset at `./c4/en/` relative to the repo root. Run the following commands **from the root of this repository**:
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/datasets/allenai/c4
+cd c4
+git lfs pull --include "en/*"
+cd ..
+```
+
+This will create a `c4/en/` folder directly inside the repo root, resulting in the following structure:
+
+```
+poet/
+├── c4/
+│   └── en/
+│       ├── c4-train.00000-of-01024.json.gz
+│       └── ...
+├── torchrun_main.py
+└── ...
+```
+
+> **Note:** If no local data is found, the training script will automatically fall back to streaming the dataset directly from HuggingFace (`allenai/c4`), which requires an internet connection but no local storage.
+
+---
+
+## Usage
+
+### POET — LLM Pretraining
+
+```python
+from poet import POETConfig, wrap_model_with_poet
+
+config = POETConfig(
+    variant="block_stochastic",  # "block_stochastic" (POET-BS) or "fully_stochastic" (POET-FS)
+    block_size=128,              # Sampling budget b
+    neumann_terms=5,             # Cayley-Neumann approximation order
+    merge_interval=100,          # Steps between merge-then-reinitialize
+)
+
+model = ...  # Your LLaMA / transformer model
+model = wrap_model_with_poet(model, config)
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+```
+
+### POET-X — Memory-Efficient Large-Scale Training
+
+```python
+from poetx import POETXConfig, wrap_model_with_poetx
+
+config = POETXConfig(
+    block_size=256,    # Block size b
+    variant="mem",     # "fast" | "mem" (gradient checkpointing)
+    quantized=False,   # Set True for POET-XQ (INT8 base weights)
+)
+
+model = wrap_model_with_poetx(model, config)
+
+# Works with standard DDP (no FSDP needed)
+model = torch.nn.parallel.DistributedDataParallel(model)
+```
+
+### Training Script
+
+```bash
+# Pretrain LLaMA-130M with POET-BS (b=128) on C4
+python train.py \
+    --model_size 130M \
+    --method poet_bs \
+    --block_size 128 \
+    --dataset c4 \
+    --max_tokens 40B
+
+# Pretrain LLaMA-3B with POET-X_mem on C4
+python train.py \
+    --model_size 3B \
+    --method poetx_mem \
+    --block_size 512 \
+    --dataset c4 \
+    --max_tokens 60B
+```
+
+### Merge Weights for Inference
+
+After training, orthogonal matrices merge into base weights — **zero inference overhead**:
+
+```python
+from poet import merge_poet_weights
+
+model = merge_poet_weights(model)  # W ← R W_0 P
+model.save_pretrained("./my-pretrained-llm")
+```
 
 ---
 
@@ -188,92 +330,6 @@ Four engineering innovations:
 | `POET-X_fast` | Medium | Fast | Standard autograd, saves activation $b$ |
 | `POET-X_mem` | **Lowest** | Moderate | Gradient checkpointing, recomputes $b$ on-the-fly |
 | `POET-X_Q` | **Lowest** | High throughput | INT8 quantized base weights, dequantized on-the-fly |
-
----
-
-## Installation
-
-```bash
-git clone https://github.com/<your-org>/poet.git
-cd poet
-pip install -e .
-```
-
-**Requirements:**
-- Python ≥ 3.9
-- PyTorch ≥ 2.0
-- CUDA ≥ 11.8
-- Triton ≥ 2.0 (for POET-X fused kernels)
-
----
-
-## Usage
-
-### POET — LLM Pretraining
-
-```python
-from poet import POETConfig, wrap_model_with_poet
-
-config = POETConfig(
-    variant="block_stochastic",  # "block_stochastic" (POET-BS) or "fully_stochastic" (POET-FS)
-    block_size=128,              # Sampling budget b
-    neumann_terms=5,             # Cayley-Neumann approximation order
-    merge_interval=100,          # Steps between merge-then-reinitialize
-)
-
-model = ...  # Your LLaMA / transformer model
-model = wrap_model_with_poet(model, config)
-
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-```
-
-### POET-X — Memory-Efficient Large-Scale Training
-
-```python
-from poetx import POETXConfig, wrap_model_with_poetx
-
-config = POETXConfig(
-    block_size=256,    # Block size b
-    variant="mem",     # "fast" | "mem" (gradient checkpointing)
-    quantized=False,   # Set True for POET-XQ (INT8 base weights)
-)
-
-model = wrap_model_with_poetx(model, config)
-
-# Works with standard DDP (no FSDP needed)
-model = torch.nn.parallel.DistributedDataParallel(model)
-```
-
-### Training Script
-
-```bash
-# Pretrain LLaMA-130M with POET-BS (b=128) on C4
-python train.py \
-    --model_size 130M \
-    --method poet_bs \
-    --block_size 128 \
-    --dataset c4 \
-    --max_tokens 40B
-
-# Pretrain LLaMA-3B with POET-X_mem on C4
-python train.py \
-    --model_size 3B \
-    --method poetx_mem \
-    --block_size 512 \
-    --dataset c4 \
-    --max_tokens 60B
-```
-
-### Merge Weights for Inference
-
-After training, orthogonal matrices merge into base weights — **zero inference overhead**:
-
-```python
-from poet import merge_poet_weights
-
-model = merge_poet_weights(model)  # W ← R W_0 P
-model.save_pretrained("./my-pretrained-llm")
-```
 
 ---
 
