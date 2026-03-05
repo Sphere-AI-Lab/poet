@@ -1,0 +1,26 @@
+source .venv/bin/activate
+
+# Resolve repo root and source wandb_api.sh from there
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "$SCRIPT_DIR")"
+
+[ -f "$REPO_ROOT/wandb_api.sh" ] && source "$REPO_ROOT/wandb_api.sh"
+
+torchrun --standalone --nproc_per_node 8 torchrun_main.py \
+    --model_config configs/llama_60m_oft.json \
+    --lr 0.001 \
+    --batch_size 32 \
+    --total_batch_size 512 \
+    --num_training_steps 50000 \
+    --warmup_steps 0 \
+    --min_lr_ratio 0.1 \
+    --weight_decay 0.0 \
+    --grad_clipping 0.1 \
+    --dtype bfloat16 \
+    --eval_every 1000 \
+    --save_every 10000000 \
+    --optimizer adamw \
+    --init_type same \
+
+
+    #     --max_train_tokens 5B \
