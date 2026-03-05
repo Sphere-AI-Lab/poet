@@ -9,4 +9,4 @@ from .poet_layer import replace_linear_with_poet as replace_linear_with_poet
 from .poet_layer import check_and_merge as check_and_merge
 from .poet_layer import get_grad_clipping_value as get_grad_clipping_value
 from .poet_layer import estimate_poet_delta_weff_spec as estimate_poet_delta_weff_spec
-from .poet_layer import _find_module_by_name_substr as _find_module_by_name_substrßß
+from .poet_layer import _find_module_by_name_substr as _find_module_by_name_substr

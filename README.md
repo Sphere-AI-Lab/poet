@@ -5,6 +5,9 @@
 [![Paper](https://img.shields.io/badge/arXiv-2506.08001-b31b1b.svg)](https://arxiv.org/abs/2506.08001)
 [![NeurIPS 2025](https://img.shields.io/badge/NeurIPS-2025-4b44ce.svg)](https://neurips.cc/virtual/2025/poster/118691)
 [![POET Page](https://img.shields.io/badge/Project-POET-orange)](https://spherelab.ai/poet/)
+
+**POET-X: Memory-efficient LLM Training by Scaling Orthogonal Transformation**
+
 [![POET-X Page](https://img.shields.io/badge/Project-POET--X-blue)](https://spherelab.ai/poetx/)
 
 > Zeju Qiu, Simon Buchholz, Tim Z. Xiao, Maximilian Dax, Bernhard Schölkopf, Weiyang Liu  
