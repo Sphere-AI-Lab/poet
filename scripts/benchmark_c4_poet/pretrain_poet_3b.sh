@@ -11,7 +11,7 @@ torchrun --standalone --nproc_per_node 8 torchrun_main.py \
     --total_batch_size 512 \
     --max_length 256 \
     --num_training_steps 600000 \
-    --warmup_steps 0 \
+    --warmup_steps 5000 \
     --min_lr_ratio 0.01 \
     --weight_decay 0.0 \
     --grad_clipping 0.1 \
@@ -19,7 +19,8 @@ torchrun --standalone --nproc_per_node 8 torchrun_main.py \
     --eval_every 20000 \
     --save_every 10000000 \
     --optimizer poet \
-    --poet_lr 0.002 \
+    --poet_lr 0.0005 \
     --poet_reset_gap 200 \
     --poet_block_size 512 \
+    --poet_scale_mode 1 \
     --init_type normalized \

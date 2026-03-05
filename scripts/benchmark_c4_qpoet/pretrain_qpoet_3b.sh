@@ -10,7 +10,7 @@ torchrun --standalone --nproc_per_node 8 torchrun_main.py \
     --batch_size 64 \
     --total_batch_size 256 \
     --max_length 256 \
-    --num_training_steps 999 \
+    --num_training_steps 100000 \
     --warmup_steps 5000 \
     --min_lr_ratio 0.01 \
     --weight_decay 0.01 \
