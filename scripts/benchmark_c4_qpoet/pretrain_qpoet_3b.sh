@@ -1,9 +1,4 @@
-# source .venv/bin/activate
-
-. /home/zqiu/anaconda3/etc/profile.d/conda.sh
-module load cuda/12.9
-conda activate poet
-
+# Running on 8 B200s
 torchrun --standalone --nproc_per_node 8 torchrun_main.py \
     --model_config configs/llama_3b.json \
     --lr 0.001 \
