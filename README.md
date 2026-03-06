@@ -94,11 +94,10 @@ poet/
 
 > **Note:** If no local data is found, the training script will automatically fall back to streaming the dataset directly from HuggingFace (`allenai/c4`), which requires an internet connection but no local storage.
 
----
 
 ## Usage
 
-### POET/POET-X — LLM Pretraining
+<!-- ### POET/POET-X — LLM Pretraining
 
 ```python
 from poet import POETConfig, wrap_model_with_poet, POETAdamW
@@ -127,7 +126,7 @@ bash scripts/benchmark_c4_poet/pretrain_poet_3b.sh
 
 # Pretrain LLaMA-3B with POET-XQ (block_size=512) on C4
 bash scripts/benchmark_c4_qpoet/pretrain_qpoet_3b.sh
-```
+``` -->
 
 ### Merge Weights for Inference
 
@@ -139,8 +138,6 @@ from poet import merge_poet_weights
 model = merge_poet_weights(model)  # W ← R W_0 P
 model.save_pretrained("./my-pretrained-llm")
 ```
-
----
 
 ## POET
 
@@ -164,13 +161,6 @@ where $W_0 \in \mathbb{R}^{m \times n}$ is a **fixed** randomly initialized matr
 <p align="center">
   <img src="assets/poet/svd_entropy.png" alt="SVD entropy comparison" width="65%">
   <br><em>POET maintains consistently higher SVD entropy (singular value diversity) throughout training compared to AdamW and Muon.</em>
-</p>
-
-### Energy & Spectrum Preservation
-
-<p align="center">
-  <img src="assets/poet/energy_spectrum.png" alt="Energy and spectrum preservation" width="65%">
-  <br><em>POET with normalized Gaussian initialization simultaneously preserves both hyperspherical energy and the weight spectrum — explaining its strong generalization.</em>
 </p>
 
 ### Efficient Approximation: Stochastic Primitive Optimization (SPO)
@@ -303,7 +293,7 @@ Four engineering innovations:
 |---|---|---|---|
 | `POET-X_fast` | Medium | Fast | Standard autograd, saves activation $b$ |
 | `POET-X_mem` | **Lowest** | Moderate | Gradient checkpointing, recomputes $b$ on-the-fly |
-| `POET-X_Q` | **Lowest** | High throughput | INT8 quantized base weights, dequantized on-the-fly |
+| `POET-XQ` | **Lowest** | High throughput | INT8 quantized base weights, dequantized on-the-fly |
 
 ---
 
