@@ -8,6 +8,7 @@
 
 **POET-X: Memory-efficient LLM Training by Scaling Orthogonal Transformation**
 
+[![Paper](https://img.shields.io/badge/arXiv-2603.05500-b31b1b.svg)](https://arxiv.org/abs/2603.05500)
 [![POET-X Page](https://img.shields.io/badge/Project-POET--X-blue)](https://spherelab.ai/poetx/)
 
 > Zeju Qiu, Simon Buchholz, Tim Z. Xiao, Maximilian Dax, Bernhard Schölkopf, Weiyang Liu  
@@ -100,10 +101,10 @@ poet/
 
 ## Usage
 
-### POET — LLM Pretraining
+### POET/POET-X — LLM Pretraining
 
 ```python
-from poet import POETConfig, wrap_model_with_poet
+from poet import POETConfig, wrap_model_with_poet, POETAdamW
 
 config = POETConfig(
     variant="block_stochastic",  # "block_stochastic" (POET-BS) or "fully_stochastic" (POET-FS)
@@ -115,44 +116,20 @@ config = POETConfig(
 model = ...  # Your LLaMA / transformer model
 model = wrap_model_with_poet(model, config)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-```
-
-### POET-X — Memory-Efficient Large-Scale Training
-
-```python
-from poetx import POETXConfig, wrap_model_with_poetx
-
-config = POETXConfig(
-    block_size=256,    # Block size b
-    variant="mem",     # "fast" | "mem" (gradient checkpointing)
-    quantized=False,   # Set True for POET-XQ (INT8 base weights)
-)
-
-model = wrap_model_with_poetx(model, config)
-
 # Works with standard DDP (no FSDP needed)
 model = torch.nn.parallel.DistributedDataParallel(model)
+
+optimizer = POETAdam(model.parameters(), lr=1e-3)
 ```
 
 ### Training Script
 
 ```bash
-# Pretrain LLaMA-130M with POET-BS (b=128) on C4
-python train.py \
-    --model_size 130M \
-    --method poet_bs \
-    --block_size 128 \
-    --dataset c4 \
-    --max_tokens 40B
+# Pretrain LLaMA-3B with POET-X (block_size=512) on C4
+bash scripts/benchmark_c4_poet/pretrain_poet_3b.sh
 
-# Pretrain LLaMA-3B with POET-X_mem on C4
-python train.py \
-    --model_size 3B \
-    --method poetx_mem \
-    --block_size 512 \
-    --dataset c4 \
-    --max_tokens 60B
+# Pretrain LLaMA-3B with POET-XQ (block_size=512) on C4
+bash scripts/benchmark_c4_qpoet/pretrain_qpoet_3b.sh
 ```
 
 ### Merge Weights for Inference
@@ -341,6 +318,16 @@ Four engineering innovations:
   author={Qiu, Zeju and Buchholz, Simon and Xiao, Tim Z. and Dax, Maximilian and Sch{\"o}lkopf, Bernhard and Liu, Weiyang},
   journal={arXiv preprint arXiv:2506.08001},
   year={2025}
+}
+
+@misc{qiu2026poetxmemoryefficientllmtraining,
+      title={POET-X: Memory-efficient LLM Training by Scaling Orthogonal Transformation}, 
+      author={Zeju Qiu and Lixin Liu and Adrian Weller and Han Shi and Weiyang Liu},
+      year={2026},
+      eprint={2603.05500},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2603.05500}, 
 }
 ```
 
