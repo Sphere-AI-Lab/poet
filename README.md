@@ -201,13 +201,6 @@ A **merge-then-reinitialize** trick periodically absorbs $R, P$ into $W_0$, prev
   <br><em>POET-FS (b=1/2) still outperforms AdamW even when AdamW is trained with ~3× more tokens.</em>
 </p>
 
-**Parameter budget allocation:**
-<p align="center">
-  <img src="assets/poet/budget.png" alt="Parameter budget" width="55%">
-  <br><em>Balanced allocation between R and P consistently yields the best validation perplexity.</em>
-</p>
-
----
 
 ## POET-X
 
@@ -261,10 +254,6 @@ Training dynamics with different block sizes:
 <p align="center">
   <img src="assets/poetx/throughput_scale.png" alt="Throughput scaling" width="72%">
   <br><em>POET-X closely follows ideal linear scaling on 64× H100s, while AdamW (FSDP) plateaus due to communication overhead.</em>
-</p>
-
-<p align="center">
-  <img src="assets/poetx/throughput_comparison.png" alt="Throughput comparison" width="72%">
 </p>
 
 ### Method: Key Optimizations
