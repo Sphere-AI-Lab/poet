@@ -97,7 +97,17 @@ poet/
 
 ## Usage
 
-<!-- ### POET/POET-X — LLM Pretraining
+### Quick Start
+
+```bash
+# Pretrain LLaMA-3B with POET-X (block_size=512) on C4
+bash scripts/benchmark_c4_poet/pretrain_poet_3b.sh
+
+# Pretrain LLaMA-3B with POET-XQ (block_size=512) on C4
+bash scripts/benchmark_c4_qpoet/pretrain_qpoet_3b.sh
+```
+
+<!-- ### Using POET/POET-X for LLM Pretraining
 
 ```python
 from poet import POETConfig, wrap_model_with_poet, POETAdamW
@@ -118,16 +128,6 @@ model = torch.nn.parallel.DistributedDataParallel(model)
 optimizer = POETAdam(model.parameters(), lr=1e-3)
 ```
 
-### Training Script
-
-```bash
-# Pretrain LLaMA-3B with POET-X (block_size=512) on C4
-bash scripts/benchmark_c4_poet/pretrain_poet_3b.sh
-
-# Pretrain LLaMA-3B with POET-XQ (block_size=512) on C4
-bash scripts/benchmark_c4_qpoet/pretrain_qpoet_3b.sh
-``` -->
-
 ### Merge Weights for Inference
 
 After training, orthogonal matrices merge into base weights — **zero inference overhead**:
@@ -137,7 +137,7 @@ from poet import merge_poet_weights
 
 model = merge_poet_weights(model)  # W ← R W_0 P
 model.save_pretrained("./my-pretrained-llm")
-```
+``` -->
 
 ## POET
 
