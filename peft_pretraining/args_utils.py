@@ -17,8 +17,6 @@ def check_args_torchrun_main(args):
             )
             if args.poet_mem_efficient_mode:
                 args.run_name += "-mem_efficient_mode"
-            if args.poet_neurips_version:
-                args.run_name += "-neurips_version"
         elif args.optimizer.lower() == "lora":
             args.run_name = (
                 f"{args.optimizer}-lr-{args.lr}-lora_r-{args.lora_r}-warmup-{args.warmup_steps}-max_length-{args.max_length}-bs-{args.batch_size}"

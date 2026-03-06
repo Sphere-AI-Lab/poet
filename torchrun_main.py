@@ -194,7 +194,6 @@ def parse_args(args):
     parser.add_argument("--poet_reset_gap", type=int, default=200)
     parser.add_argument("--poet_block_size", type=int, default=256)
     parser.add_argument("--poet_mem_efficient_mode", action="store_true")
-    parser.add_argument("--poet_neurips_version", action="store_true")
     parser.add_argument("--gd_warmup_steps", type=int, default=2000)
     parser.add_argument("--poet_balance_lr", action="store_true")
     parser.add_argument("--poet_use_rmsnorm", action="store_true")

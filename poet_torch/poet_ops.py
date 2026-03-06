@@ -2,9 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-from typing import Callable, Optional, Union, Tuple
-
-
+from typing import Optional, Tuple
 
 ######################## Chain Layer Checkpoint Slow Quantized ########################
 
@@ -863,6 +861,20 @@ def _(x):
 torch.library.register_autograd(
     "poet::cayley", cayley_backward, setup_context=cayley_setup_context
 )
+
+def chain_layer_x_checkpoint_mem_o2(x: torch.Tensor, Rin: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor], Rout: torch.Tensor,
+                                    perm_in_inv: torch.Tensor, perm_in: torch.Tensor, perm_out: torch.Tensor, perm_out_inv: torch.Tensor, block_size: int) -> torch.Tensor:
+    return torch.ops.poet.chain_layer_checkpoint_mem_o2(x, Rin, weight, bias, Rout, perm_in_inv, perm_in, perm_out, perm_out_inv, block_size)
+    
+# def chain_layer_x_checkpoint(x: torch.Tensor, Rin: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor], Rout: torch.Tensor, block_size: int) -> torch.Tensor:
+#     return torch.ops.poet.chain_layer_checkpoint(x, Rin, weight, bias, Rout, block_size)
+
+def chain_layer_x_checkpoint_q8(x: torch.Tensor, Rin: torch.Tensor, W_q: torch.Tensor, W_scales: torch.Tensor, W_zeros: torch.Tensor, group_size: int, b: Optional[torch.Tensor], Rout: torch.Tensor, bsz: int) -> torch.Tensor:
+    return torch.ops.poet.chain_layer_checkpoint_q8(x, Rin, W_q, W_scales, W_zeros, group_size, b, Rout, bsz)
+
+def chain_layer_x_checkpoint_mem_o2_q8(x: torch.Tensor, Rin: torch.Tensor, W_q: torch.Tensor, W_scales: torch.Tensor, W_zeros: torch.Tensor, group_size: int, b: Optional[torch.Tensor], Rout: torch.Tensor, perm_in_inv: torch.Tensor, perm_in: torch.Tensor, perm_out: torch.Tensor, perm_out_inv: torch.Tensor, bsz: int) -> torch.Tensor:
+    return torch.ops.poet.chain_layer_checkpoint_mem_o2_q8(x, Rin, W_q, W_scales, W_zeros, group_size, b, Rout, perm_in_inv, perm_in, perm_out, perm_out_inv, bsz)
+
 
 def test_poet_cayley():
     Q = torch.randn((16, 256, 256), requires_grad=True, device="cuda")
