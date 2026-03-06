@@ -142,12 +142,8 @@ def _(x, Rin, W_q, W_scales, W_zeros, group_size, b, Rout, perm_in_inv, perm_in,
     rout = Rout.size(0)
     N = B * S
     Dout, Din = W_q.shape
-    shape0 = (rout, N, bsz)
-    # shape1 = (N, Dout)
     y = x.new_empty((B, S, Dout), device=x.device, dtype=x.dtype)
-    # y0 = x.new_empty(shape0).transpose(0, 1).reshape(B, S, Dout)
-    # y1 = x.new_empty(shape1).view(N, rout, bsz).transpose(0, 1)
-    return y # y0, y1
+    return y
 
 torch.library.register_autograd(
     "poet::chain_layer_checkpoint_mem_o2_q8",
@@ -247,8 +243,6 @@ def chain_layer_checkpoint_q8_backward(ctx, g: torch.Tensor) -> Tuple[
     xR   = xR_r.transpose(0, 1).reshape(N, rin * bsz)
 
     # grads
-    # grad_W = g_yb.t() @ xR
-    # grad_b = g_yb.sum(0) if ctx.b is not None else None
     g_xR   = g_yb @ W                                # [N, rin*bsz]
 
     # grad Rin
@@ -278,12 +272,8 @@ def _(x, Rin, W_q, W_scales, W_zeros, group_size, b, Rout, bsz):
     rout = Rout.size(0)
     N = B * S
     Dout, Din = W_q.shape
-    shape0 = (rout, N, bsz)
-    # shape1 = (N, Dout)
     y = x.new_empty((B, S, Dout), device=x.device, dtype=x.dtype)
-    # y0 = x.new_empty(shape0).transpose(0, 1).reshape(B, S, Dout)
-    # y1 = x.new_empty(shape1).view(N, rout, bsz).transpose(0, 1)
-    return y # y0, y1
+    return y
 
 torch.library.register_autograd(
     "poet::chain_layer_checkpoint_q8", 
@@ -307,41 +297,8 @@ class PermutationFunction(torch.autograd.Function):
 		return grad_input, None, None
 
 
-########################### Triu_assign ###########################
-@torch.library.custom_op("poet::triu_assign", mutates_args=())
-def triu_assign(
-    v: torch.Tensor,
-    rows: torch.Tensor,
-    cols: Optional[torch.Tensor],
-    block_size: int
-) -> torch.Tensor:
-    matrix = v.new_zeros(v.shape[0], block_size, block_size)
-    matrix[:, rows, cols] = v
-    # requires_grad after in-place assignment
-    matrix.requires_grad_(True)
-    return matrix
-
-def triu_assign_setup_context(ctx, inputs, output):
-    v, rows, cols, block_size  = inputs
-    ctx.save_for_backward(rows, cols)
-
-def triu_assign_backward(ctx, g: torch.Tensor) -> torch.Tensor:
-    rows, cols = ctx.saved_tensors
-    grad_v = g[:, rows, cols]
-    return grad_v, None, None, None
-
-@triu_assign.register_fake
-def _(v, rows, cols, block_size):
-    batch_size = v.shape[0]
-    return v.new_empty(batch_size, block_size, block_size, requires_grad=True)
-
-torch.library.register_autograd(
-    "poet::triu_assign", triu_assign_backward, setup_context=triu_assign_setup_context
-)
-
-
 ######################## Chain Layer Checkpoint Fast ########################
-
+"""
 @torch.library.custom_op("poet::chain_layer_checkpoint", mutates_args=())
 def chain_layer_checkpoint(
     x: torch.Tensor,
@@ -410,8 +367,6 @@ def chain_layer_checkpoint_backward(ctx, g: torch.Tensor) -> Tuple[
     xR   = xR_r.transpose(0, 1).reshape(N, rin * bsz)
 
     # grads
-    # grad_W = g_yb.t() @ xR
-    # grad_b = g_yb.sum(0) if ctx.b is not None else None
     g_xR   = g_yb @ W                                # [N, rin*bsz]
 
     # grad Rin
@@ -440,17 +395,13 @@ def _(x, Rin, W, b, Rout, bsz):
     rout = Rout.size(0)
     N = B * S
     Dout, Din = W.shape
-    shape0 = (rout, N, bsz)
-    # shape1 = (N, Dout)
     y = x.new_empty((B, S, Dout), device=x.device, dtype=x.dtype)
-    # y0 = x.new_empty(shape0).transpose(0, 1).reshape(B, S, Dout)
-    # y1 = x.new_empty(shape1).view(N, rout, bsz).transpose(0, 1)
-    return y # y0, y1
+    return y
 
 torch.library.register_autograd(
     "poet::chain_layer_checkpoint", chain_layer_checkpoint_backward, setup_context=chain_layer_checkpoint_setup_context
 )
-
+"""
 ######################## Chain Layer Checkpoint Slow ########################
 
 @torch.library.custom_op("poet::chain_layer_checkpoint_mem_o2", mutates_args=())
@@ -571,12 +522,8 @@ def _(x, Rin, W, b, Rout, perm_in_inv, perm_in, perm_out, perm_out_inv, bsz):
     rout = Rout.size(0)
     N = B * S
     Dout, Din = W.shape
-    shape0 = (rout, N, bsz)
-    # shape1 = (N, Dout)
     y = x.new_empty((B, S, Dout), device=x.device, dtype=x.dtype)
-    # y0 = x.new_empty(shape0).transpose(0, 1).reshape(B, S, Dout)
-    # y1 = x.new_empty(shape1).view(N, rout, bsz).transpose(0, 1)
-    return y # y0, y1
+    return y
 
 torch.library.register_autograd(
     "poet::chain_layer_checkpoint_mem_o2",
@@ -617,8 +564,6 @@ def cayley_forward_kernel(
     pid_batch = pid_all // grid_batch
     pid = pid_all % grid_batch
 
-    # pid_row = pid // num_pid_row
-    # pid_col = pid % num_pid_row
     num_pid_in_group = GROUP_SIZE_M * num_pid_row
     group_id = pid // num_pid_in_group
     first_pid_m = group_id * GROUP_SIZE_M
@@ -652,9 +597,6 @@ def cayley_forward_kernel(
         acc += tl.dot(a, b)  # q4_tile_k
         c = tl.load(c_ptrs, mask=(offs_k[:, None] < B) & (offs_col[None, :] < B), other=0.0)
         q3_tile += tl.dot(a, c)
-
-    # NOTE(Lixin): I believe we can further optimize this load as we already load q and q2 inside the K loop
-    #  but it seems that triton hasn't yet supported local tensor indexing
 
     q_tile_ptrs = base_q + (offs_row[:, None] * q_stride_row + offs_col[None, :] * q_stride_col)
     q3_tile += tl.load(q_tile_ptrs, mask=(offs_row[:, None] < B) & (offs_col[None, :] < B), other=0.0)
@@ -765,8 +707,6 @@ def cayley_backward_kernel_grad_final(
     pid_batch = pid_all // grid_batch
     pid = pid_all % grid_batch
 
-    # pid_row = pid // num_pid_row
-    # pid_col = pid % num_pid_row
     num_pid_in_group = GROUP_SIZE_M * num_pid_row
     group_id = pid // num_pid_in_group
     first_pid_m = group_id * GROUP_SIZE_M
@@ -907,10 +847,6 @@ def cayley_kernel_bwd(Q: torch.Tensor, Q2: torch.Tensor, dY: torch.Tensor) -> to
     
     return grad
 
-# @torch.library.custom_op("poet::cayley", mutates_args=())
-# def cayley(Q: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-#     return torch.ops.poet._cayley_kernel_fwd(Q)
-
 def cayley_setup_context(ctx, inputs, output):
     Q, = inputs
     _, Q2 = output
@@ -928,62 +864,6 @@ torch.library.register_autograd(
     "poet::cayley", cayley_backward, setup_context=cayley_setup_context
 )
 
-######################### Test #########################
-def test_poet_triu_assign():
-    device = torch.device('cuda')
-    block_size = 16
-    rank_in = 8
-    rank_out = 4
-    rows, cols = torch.triu_indices(block_size, block_size, 1, device=device)
-    n_elements = block_size * (block_size - 1) // 2
-    Rl = torch.randn((rank_in, n_elements), device=device, requires_grad=True)
-    Rr = torch.randn((rank_out, n_elements), device=device, requires_grad=True)
-    vec_cat = torch.cat([Rl, Rr], dim=0).contiguous()
-    sample_inputs = [
-        (vec_cat, rows, cols, block_size),
-    ]
-    for args in sample_inputs:
-        torch.library.opcheck(triu_assign, args)
-        torch.library.opcheck(triu_assign, args, test_utils="test_aot_dispatch_static")
-    y = torch.ops.poet.triu_assign(*sample_inputs[0])
-    y.sum().backward(retain_graph=True)
-    print("test triu_assign:")
-    print("y:", y.shape)
-    print("dRl:", Rl.grad.shape)
-    print("dRr:", Rr.grad.shape)
-
-def test_poet_chain_layer():
-    device = torch.device('cuda')
-    dtype = torch.bfloat16
-    B = 2
-    S = 256
-    Din = 512
-    Dout = 1024
-    bsz = 256
-    rin = Din // bsz    # Number of input blocks
-    rout = Dout // bsz  # Number of output blocks
-    x = torch.randn(B, S, Din, device=device, dtype=dtype, requires_grad=True)
-    Rin = torch.randn(rin, bsz, bsz, device=device, dtype=dtype, requires_grad=True)
-    W = torch.randn(Dout, Din, device=device, dtype=dtype, requires_grad=False)
-    b = torch.randn(Dout, device=device, dtype=dtype, requires_grad=False)
-    Rout = torch.randn(rout, bsz, bsz, device=device, dtype=dtype, requires_grad=True)
-    
-    sample_inputs = [
-        (x, Rin, W, b, Rout, bsz),
-        (x, Rin, W, None, Rout, bsz),
-    ]
-    for args in sample_inputs:
-        torch.library.opcheck(chain_layer, args)
-        torch.library.opcheck(chain_layer, args, test_utils="test_aot_dispatch_static")
-    y, _ = torch.ops.poet.chain_layer(*sample_inputs[0])
-    y.sum().backward(retain_graph=True)
-    print("test chain_layer:")
-    print("y:", y.shape)
-    print("dX:", x.grad.shape)
-    print("dRin:", Rin.grad.shape)
-    print("dRout:", Rout.grad.shape)
-
-
 def test_poet_cayley():
     Q = torch.randn((16, 256, 256), requires_grad=True, device="cuda")
     torch.library.opcheck(cayley, (Q,))
@@ -995,6 +875,4 @@ def test_poet_cayley():
     print("dQ:", Q.grad.shape)
 
 if __name__ == "__main__":
-    # test_poet_triu_assign()
-    # test_poet_chain_layer()
     test_poet_cayley()

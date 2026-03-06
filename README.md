@@ -1,4 +1,4 @@
-# POET & POET-X
+# POET & POET-X for LLM Pretraining
 
 **Reparameterized LLM Training via Orthogonal Equivalence Transformation**
 
@@ -10,9 +10,6 @@
 
 [![Paper](https://img.shields.io/badge/arXiv-2603.05500-b31b1b.svg)](https://arxiv.org/abs/2603.05500)
 [![POET-X Page](https://img.shields.io/badge/Project-POET--X-blue)](https://spherelab.ai/poetx/)
-
-> Zeju Qiu, Simon Buchholz, Tim Z. Xiao, Maximilian Dax, Bernhard Schölkopf, Weiyang Liu  
-> *Max Planck Institute for Intelligent Systems, Tübingen · The Chinese University of Hong Kong*
 
 ---
 
