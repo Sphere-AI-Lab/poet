@@ -3,7 +3,7 @@
 This is a simplified single-GPU training script using a dummy dataset.
 
 Usage:
-    python main_poet_minimal.py --model_config configs/llama_9m.json --batch_size 2 --poet_block_size 16
+    python main_poet_minimal.py --model_config configs/llama_20m.json --batch_size 2 --poet_block_size 16
 """
 
 import argparse
@@ -38,9 +38,11 @@ class DummyDataset(IterableDataset):
         
     def __iter__(self) -> Iterator[dict]:
         for _ in range(self.num_samples):
-            input_ids = torch.randint(0, self.vocab_size, (self.seq_length,))
+            random_start = np.random.randint(self.vocab_size - self.seq_length - 10)
+            input_ids = torch.arange(random_start, random_start + self.seq_length)
             attention_mask = torch.ones(self.seq_length, dtype=torch.long)
-            yield {"input_ids": input_ids, "attention_mask": attention_mask}
+            labels = input_ids.clone()
+            yield {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
 
 
 def parse_args():
@@ -53,7 +55,7 @@ def parse_args():
     # Training
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
     parser.add_argument("--gradient_accumulation", type=int, default=4, help="Gradient accumulation steps")
-    parser.add_argument("--num_training_steps", type=int, default=100, help="Number of training steps")
+    parser.add_argument("--num_training_steps", type=int, default=10000, help="Number of training steps")
     parser.add_argument("--max_length", type=int, default=256, help="Sequence length")
     
     # Optimizer
@@ -84,7 +86,7 @@ def parse_args():
     # System
     parser.add_argument("--dtype", type=str, default="bfloat16" if torch.cuda.is_bf16_supported() else "float32")
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--eval_every", type=int, default=25)
+    parser.add_argument("--eval_every", type=int, default=50)
     
     args = parser.parse_args()
     args.total_batch_size = args.batch_size * args.gradient_accumulation
@@ -171,12 +173,26 @@ def setup_model_and_optimizer(args, device):
     
     return model, optimizer
 
+def setup_dataloader(args):
+    # Create dummy dataset
+    model_config = AutoConfig.from_pretrained(args.model_config)
+    dataset = DummyDataset(
+        vocab_size=model_config.vocab_size,
+        seq_length=args.max_length,
+        num_samples=args.num_training_steps * args.batch_size * 10
+    )
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=0)
+    eval_dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=0)
+
+    return dataloader, eval_dataloader
+
 
 def evaluate(model, dataloader, device, max_batches: int = 10):
     """Evaluate model on dummy dataset."""
     model.eval()
     total_loss = 0.0
     total_tokens = 0
+    total_batches = 0
     
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
@@ -185,13 +201,15 @@ def evaluate(model, dataloader, device, max_batches: int = 10):
             
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
-            labels = input_ids.clone()
+            labels = batch["labels"].to(device)
             
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            total_loss += outputs.loss.item() * input_ids.numel()
-            total_tokens += input_ids.numel()
+            total_loss += outputs.loss.item()
+            num_tokens = (input_ids != -100).sum().item()
+            total_tokens += num_tokens
+            total_batches += 1
     
-    avg_loss = total_loss / total_tokens if total_tokens > 0 else float('inf')
+    avg_loss = total_loss / total_batches if total_batches > 0 else float('inf')
     perplexity = np.exp(avg_loss) if avg_loss < 10 else float('inf')
     
     model.train()
@@ -245,17 +263,8 @@ def main():
         warmup_steps=args.warmup_steps,
         min_lr_ratio=args.min_lr_ratio,
     )
-    
-    # Create dummy dataset
-    model_config = AutoConfig.from_pretrained(args.model_config)
-    dataset = DummyDataset(
-        vocab_size=model_config.vocab_size,
-        seq_length=args.max_length,
-        num_samples=args.num_training_steps * args.batch_size * 10
-    )
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=0)
-    eval_dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=0)
-    
+
+    dataloader, eval_dataloader = setup_dataloader(args)
     # Training loop
     model.train()
     
@@ -268,7 +277,7 @@ def main():
         # Forward
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
-        labels = input_ids.clone()
+        labels = batch["labels"].to(device)
         
         outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
         loss = outputs.loss / args.gradient_accumulation

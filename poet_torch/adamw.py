@@ -27,7 +27,6 @@ class POETAdamW(Optimizer):
         eps: Adam's epsilon for numerical stability. Default: 1e-6.
         weight_decay: Decoupled weight decay to apply. Default: 0.0.
         correct_bias: Whether to correct bias in Adam. Default: True.
-        no_deprecation_warning: Disable deprecation warning. Default: False.
         threshold: Gradient threshold for numerical stability. Default: 5000.
         poet_reset_gap: Steps between resetting optimizer state for POET params.
             Default: 0 (disabled).
@@ -42,18 +41,10 @@ class POETAdamW(Optimizer):
         eps: float = 1e-6,
         weight_decay: float = 0.0,
         correct_bias: bool = True,
-        no_deprecation_warning: bool = False,
         threshold: int = 5000,
         poet_reset_gap: int = 0,
         poet_block_size: int = 256
     ):
-        if not no_deprecation_warning:
-            warnings.warn(
-                "This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch"
-                " implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this"
-                " warning",
-                FutureWarning,
-            )
 
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")

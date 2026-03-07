@@ -1,5 +1,4 @@
 torch
 transformers
-bitsandbytes
-tensorly
+datasets
 triton

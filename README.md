@@ -62,10 +62,10 @@ pip install -e .
 ```
 
 **Requirements:**
-- Python ≥ 3.9
-- PyTorch ≥ 2.0
-- CUDA ≥ 11.8
-- Triton ≥ 2.0 (for POET-X fused kernels)
+- Python ≥ 3.10
+- PyTorch ≥ 2.7
+- CUDA ≥ 12.6
+- Triton ≥ 3.4.0
 
 ---
 
