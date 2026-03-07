@@ -153,21 +153,22 @@ def check_and_merge(
                     if rank == 0:
                         module.merge_then_reinitialize()
 
-                    # Synchronize across ranks
-                    torch.distributed.broadcast(module.oft_R.data, src=0)
-                    torch.distributed.broadcast(module.weight.data, src=0)
-                    
-                    if isinstance(module, QPOETLinear):
-                        torch.distributed.broadcast(module.weight_scales, src=0)
-                        torch.distributed.broadcast(module.weight_zeros, src=0)
-                    
-                    if module.bias is not None:
-                        torch.distributed.broadcast(module.bias.data, src=0)
-                    
-                    torch.distributed.broadcast(module.perm_in, src=0)
-                    torch.distributed.broadcast(module.perm_in_inv, src=0)
-                    torch.distributed.broadcast(module.perm_out, src=0)
-                    torch.distributed.broadcast(module.perm_out_inv, src=0)
+                    if is_dist:
+                        # Synchronize across ranks
+                        torch.distributed.broadcast(module.oft_R.data, src=0)
+                        torch.distributed.broadcast(module.weight.data, src=0)
+                        
+                        if isinstance(module, QPOETLinear):
+                            torch.distributed.broadcast(module.weight_scales, src=0)
+                            torch.distributed.broadcast(module.weight_zeros, src=0)
+                        
+                        if module.bias is not None:
+                            torch.distributed.broadcast(module.bias.data, src=0)
+                        
+                        torch.distributed.broadcast(module.perm_in, src=0)
+                        torch.distributed.broadcast(module.perm_in_inv, src=0)
+                        torch.distributed.broadcast(module.perm_out, src=0)
+                        torch.distributed.broadcast(module.perm_out_inv, src=0)
 
         if is_dist:
             dist.barrier()
