@@ -17,7 +17,6 @@ def replace_linear_with_poet(
     module: nn.Module,
     block_size: int,
     init_type: str,
-    mup_alpha: float,
     device: Optional[torch.device] = None,
     dtype: Optional[torch.dtype] = None,
     mem_efficient_mode: bool = False,
@@ -30,8 +29,7 @@ def replace_linear_with_poet(
     Args:
         module: Module to modify.
         block_size: Block size for POET transformations.
-        init_type: Weight initialization type ('normalized' or 'mup_normalized').
-        mup_alpha: Scaling factor for mup_normalized initialization.
+        init_type: Weight initialization type ('normalized').
         device: Device for new parameters.
         dtype: Data type for new parameters.
         mem_efficient_mode: Whether to use memory-efficient mode.
@@ -63,23 +61,6 @@ def replace_linear_with_poet(
                             # spec_before = torch.linalg.norm(child.weight.data.float(), ord=2).item() / torch.sqrt(torch.tensor(child.weight.data.shape[0]) / torch.tensor(child.weight.data.shape[1]))
                             
                             child.weight.data = child.weight.data / torch.norm(child.weight.data, dim=1, keepdim=True)
-
-                        elif init_type == 'mup_normalized':
-                            d_in = torch.tensor(child.weight.data.shape[1])
-                            d_out = torch.tensor(child.weight.data.shape[0])
-
-                            # [Check 1] Measure Spectral Norm BEFORE normalization
-                            # child.weight is the original random initialization
-                            # spec_before = torch.linalg.norm(child.weight.data.float(), ord=2).item() / torch.sqrt(d_out / d_in)
-                            
-                            normed_weight = child.weight.data / torch.norm(child.weight.data, dim=1, keepdim=True)
-
-                            target_spec = mup_alpha * torch.sqrt(d_out / d_in)
-                            current_spec = torch.linalg.norm(normed_weight.float(), ord=2).item()
-
-                            scaling_factor = (target_spec / current_spec).to(dtype=normed_weight.dtype, device=normed_weight.device)
-                            final_weight = normed_weight * scaling_factor
-                            child.weight.data = final_weight
 
                         new_lin.weight.copy_(child.weight.detach().to(new_lin.weight.dtype))
 

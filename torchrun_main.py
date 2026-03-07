@@ -4,7 +4,6 @@ import json
 import random
 import argparse
 import numpy as np
-from datetime import datetime
 import glob
 import torch
 import torch.nn as nn
@@ -27,7 +26,6 @@ from transformers import LlamaForCausalLM as HF_LlamaForCausalLM
 import datasets
 from datasets import DownloadConfig, Features, Value
 import datasets.distributed
-import wandb
 import math
 
 from tqdm import tqdm
@@ -37,7 +35,6 @@ from peft_pretraining import training_utils, args_utils
 from peft_pretraining.dataloader import PreprocessedIterableDataset
 from peft_pretraining.modeling_llama import LlamaForCausalLM
 
-import bitsandbytes as bnb
 
 from poet_torch import (
     POETAdamW, 
@@ -186,8 +183,7 @@ def parse_args(args):
     # beta2 for AdamW
     parser.add_argument("--beta2", type=float, default=0.95)
 
-    parser.add_argument("--init_type", type=str, default="normalized", choices=["normalized", "same", "mup_normalized"])
-    parser.add_argument("--mup_alpha", type=float, default=1.0)
+    parser.add_argument("--init_type", type=str, default="normalized", choices=["normalized", "same"])
 
     # POET parameters
     parser.add_argument("--poet_lr", type=float, default=1e-4)
@@ -197,7 +193,6 @@ def parse_args(args):
     parser.add_argument("--gd_warmup_steps", type=int, default=2000)
     parser.add_argument("--poet_balance_lr", action="store_true")
     parser.add_argument("--poet_use_rmsnorm", action="store_true")
-    parser.add_argument("--poet_scale_mode", type=int, default=0)
 
     # POET-XQ parameters
     parser.add_argument("--weight_quant", action='store_true')
@@ -293,30 +288,6 @@ def main(args):
     # turn off logger
     if global_rank != 0: logger.remove()
 
-
-    ###########################
-    # Initialize wandb
-    ###########################
-
-    # initialize wandb with composed names (config is passed later)
-    if global_rank == 0:
-        model_stem = os.path.splitext(os.path.basename(args.model_config))[0]
-        if args.max_train_tokens is not None:
-            scale_str = f"{args.max_train_tokens/1e9:.1f}B-tokens"
-        else:
-            scale_str = f"{args.num_training_steps}steps"
-
-        # allow env/CLI override; fall back to composed name
-        project_name = os.environ.get("WANDB_PROJECT", f"sPOET-{model_stem}-{scale_str}-public")
-        project_name = getattr(args, "wandb_project", None) or project_name
-
-        group_name = os.environ.get("WANDB_RUN_GROUP", None)
-        tags = args.tags.split(",") if args.tags else None
-
-        logger.info(f"[W&B] project={project_name} | run={args.run_name}" + (f" | group={group_name}" if group_name else ""))
-        wandb.init(project=project_name, name=args.run_name, group=group_name, tags=tags)
-        if wandb.run is not None:
-            logger.info(f"[W&B] id={wandb.run.id} | url={wandb.run.url}")
         
     logger.info(f"Using dist with rank {global_rank} (only rank 0 will log)")
     logger.info("*" * 40)
@@ -394,7 +365,6 @@ def main(args):
 
     global_step = 0
     update_step = 0
-    beginning_step = 0
     tokens_seen = 0
     tokens_seen_before = 0
 
@@ -438,7 +408,6 @@ def main(args):
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     trainable_params_int8 = [p for p in model.parameters() if hasattr(p, 'group_size')]
 
-    # Initialize wandb
     run_config = dict(vars(args))
     run_config.update({
         "max_lr": run_config.pop("lr"),  # rename lr to max_lr to avoid conflicts with scheduler
@@ -450,14 +419,12 @@ def main(args):
     })
 
     if global_rank == 0:
-        wandb.config.update(run_config, allow_val_change=True)
-        wandb.save(os.path.abspath(__file__), policy="now") # save current script
         # fix tqdm visual length to 80 so that the progress bar
         # doesn't jump around when changing from external display to laptop
         pbar = tqdm(total=args.num_training_steps - update_step, desc="Update steps", ncols=80)
     
     if args.optimizer.lower() == "poet":
-        replace_linear_with_poet(model, args.poet_block_size, args.init_type, args.mup_alpha, device=model.device, dtype=model.dtype)
+        replace_linear_with_poet(model, args.poet_block_size, args.init_type, device=model.device, dtype=model.dtype)
         
         poet_params = []
         for name, param in model.named_parameters():
@@ -478,22 +445,11 @@ def main(args):
             else:
                 nodecay_params.append(param)
 
-        if args.poet_scale_mode == 0:
-            poet_scale = 1.0
-        elif args.poet_scale_mode == 1:
-            poet_scale = 1 / 2
-        elif args.poet_scale_mode == 2:
-            poet_scale = 1 / np.sqrt(2)
-        elif args.poet_scale_mode == 3:
-            poet_scale = (1 / 2) * (1 / np.sqrt(2))
-        elif args.poet_scale_mode == 4:
-            poet_scale = 0.1
-
         # poet params
         param_groups = [
             dict(params=nodecay_params, weight_decay=0.0, lr=args.lr),
             dict(params=decay_params, weight_decay=args.weight_decay, lr=args.lr),
-            dict(params=poet_params, weight_decay=0.0, lr=args.poet_lr, use_poet=True, poet_reset_gap=args.poet_reset_gap, poet_scale=poet_scale),
+            dict(params=poet_params, weight_decay=0.0, lr=args.poet_lr, use_poet=True, poet_reset_gap=args.poet_reset_gap, poet_scale=0.5),
         ]
 
     elif args.optimizer.lower() == "q_poet":
@@ -514,22 +470,11 @@ def main(args):
             else:
                 nodecay_params.append(param)
 
-        if args.poet_scale_mode == 0:
-            poet_scale = 1.0
-        elif args.poet_scale_mode == 1:
-            poet_scale = 1 / 2
-        elif args.poet_scale_mode == 2:
-            poet_scale = 1 / np.sqrt(2)
-        elif args.poet_scale_mode == 3:
-            poet_scale = (1 / 2) * (1 / np.sqrt(2))
-        elif args.poet_scale_mode == 4:
-            poet_scale = 0.1
-
         # poet params
         param_groups = [
             dict(params=nodecay_params, weight_decay=0.0, lr=args.lr),
             dict(params=decay_params, weight_decay=args.weight_decay, lr=args.lr),
-            dict(params=qpoet_params, weight_decay=0.0, lr=args.poet_lr, use_poet=True, poet_reset_gap=args.poet_reset_gap, poet_scale=poet_scale),
+            dict(params=qpoet_params, weight_decay=0.0, lr=args.poet_lr, use_poet=True, poet_reset_gap=args.poet_reset_gap, poet_scale=0.5),
         ]
 
     elif args.optimizer.lower() == "muon":
@@ -559,7 +504,6 @@ def main(args):
     logger.info(f"Trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad) / 1_000_000:.2f}M")
     logger.info(f"Saving model to {args.save_dir} every {args.save_every} update steps")
     
-    layer_wise_flag = False
     if args.optimizer.lower() == "adamw":
         optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=args.weight_decay)
     elif args.optimizer.lower() == "poet":
@@ -583,40 +527,20 @@ def main(args):
             muon_params=muon_params,
             adamw_params=adamw_params,
         )
-    # implement sgd
-    elif args.optimizer.lower() == "sgd":
-        optimizer = torch.optim.SGD(trainable_params, lr=args.lr, weight_decay=args.weight_decay, momentum=args.beta1)
-    elif args.optimizer.lower() == "adafactor":
-        args.beta1 = None if args.beta1 == 0.0 else args.beta1
-        optimizer = transformers.optimization.Adafactor(
-            trainable_params,
-            lr=args.lr,
-            eps=(1e-30, 1e-3),
-            clip_threshold=1.0,
-            decay_rate=-0.8,
-            beta1=args.beta1,
-            weight_decay=args.weight_decay,
-            relative_step=False,
-            scale_parameter=False,
-            warmup_init=False,
-        )
-    elif args.optimizer.lower() == "adam8bit":
-        optimizer = bnb.optim.Adam8bit(trainable_params, lr=args.lr, weight_decay=args.weight_decay)
     elif args.optimizer.lower() == "q_poet":
         optimizer = POETAdamW(param_groups, lr=args.lr, weight_decay=args.weight_decay, poet_block_size=args.poet_block_size)
     
     else:
         raise ValueError(f"Optimizer {args.optimizer} not supported")
 
-    if not layer_wise_flag:
-        scheduler = training_utils.get_scheduler(
-            optimizer=optimizer,
-            scheduler_type=args.scheduler,
-            num_training_steps=args.num_training_steps,
-            warmup_steps=args.warmup_steps,
-            min_lr_ratio=args.min_lr_ratio,
-            num_stable_steps=args.num_stable_steps,
-        )
+    scheduler = training_utils.get_scheduler(
+        optimizer=optimizer,
+        scheduler_type=args.scheduler,
+        num_training_steps=args.num_training_steps,
+        warmup_steps=args.warmup_steps,
+        min_lr_ratio=args.min_lr_ratio,
+        num_stable_steps=args.num_stable_steps,
+    )
 
     # base model is the model without FSDP
     base_model = model
@@ -685,15 +609,6 @@ def main(args):
         labels[labels == pad_idx] = -100
         tokens_seen += (batch["input_ids"] != pad_idx).sum().item() * world_size
 
-        # padding diagnostics (per-batch)
-        # valid_per_sample = batch["attention_mask"].sum(dim=1)  # shape: [batch]
-        # avg_valid = valid_per_sample.float().mean().item()
-        # max_len = batch["attention_mask"].shape[1]
-        # pad_ratio = 1.0 - (avg_valid / max_len)
-
-        # loss = model(**batch, labels=labels).loss
-        # scaled_loss = loss / args.gradient_accumulation
-        # scaled_loss.backward()
         is_accumulating = global_step % args.gradient_accumulation != 0
         if not args.single_gpu and is_accumulating:
             with model.no_sync():
@@ -707,7 +622,6 @@ def main(args):
 
         if is_accumulating:
             continue
-
 
         # The below code is only executed during the update step
         
@@ -726,8 +640,7 @@ def main(args):
                     max_steps=args.gd_warmup_steps,
                 )
                 total_grad_norm = torch.nn.utils.clip_grad_norm_(parameters, current_grad_clipping_value)
-                # total_grad_norm = torch.nn.utils.clip_grad_norm_(parameters, args.grad_clipping)
-            elif args.optimizer.lower() in ('muon', 'adamw', 'sgd', 'adafactor', 'adam8bit'):
+            elif args.optimizer.lower() in ('muon', 'adamw'):
                 total_grad_norm = torch.nn.utils.clip_grad_norm_(trainable_params, args.grad_clipping)
             else:
                 if args.single_gpu:
@@ -735,20 +648,15 @@ def main(args):
                 else:
                     total_grad_norm = FSDP.clip_grad_norm_(model, args.grad_clipping)
 
-        if global_rank == 0 and args.grad_clipping != 0.0:
-            wandb.log({
-                "gradients/total_grad_norm": total_grad_norm,
-            }, step=global_step)
-
         if global_rank == 0: pbar.update(1)
         
-        if not layer_wise_flag:
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
-            optimizer_step_count += 1
-            if args.optimizer.lower() == "poet" or args.optimizer.lower() == "q_poet":
-                check_and_merge(model, optimizer_step_count, args.poet_reset_gap)
+        optimizer.step()
+        scheduler.step()
+        optimizer.zero_grad()
+        optimizer_step_count += 1
+
+        if args.optimizer.lower() == "poet" or args.optimizer.lower() == "q_poet":
+            check_and_merge(model, optimizer_step_count, args.poet_reset_gap)
 
         update_step += 1
         update_time = time.time() - update_time
@@ -788,7 +696,6 @@ def main(args):
                     "update_step": update_step,
                     "global_step": global_step,
                     "config": run_config,
-                    "wandb": wandb.run.dir,
                     "dtype": args.dtype,
                 }
                 torch.save(optimizer_checkpoint, f"{current_model_directory}/optimizer.pt")
@@ -802,13 +709,7 @@ def main(args):
                 }
                 with open(f"{current_model_directory}/training_state.json", "w") as f:
                     json.dump(training_state_checkpoint, f, indent=4)
-                    
-                # save wandb related info
-                wandb_info = {
-                    "wandb_id": wandb.run.id,
-                }
-                with open(f"{args.save_dir}/wandb.json", "w") as f:
-                    json.dump(wandb_info, f, indent=4)
+
 
         # evaluation
         if update_step % args.eval_every == 0:
@@ -816,20 +717,10 @@ def main(args):
             total_loss, perplexity, evaluated_on_tokens = evaluate_model(
                 model, preprocess_batched, pad_idx, global_rank, world_size, device, args.batch_size
             )
-            if global_rank == 0:
-                wandb.log({
-                    "final_eval_loss": total_loss,
-                    "final_eval_perplexity": perplexity,
-                    "final_eval_tokens": evaluated_on_tokens,
-                    },
-                    step=global_step,
-                )
-            logger.info(f"Eval loss at step {update_step}: {total_loss}, perplexity: {perplexity:.2f}")
+            logger.info(f"Eval loss at step: {update_step}, global step: {global_step},"
+                        f"loss: {total_loss}, perplexity: {perplexity:.2f}, evaluated tokens: {evaluated_on_tokens}")
 
-        if not layer_wise_flag:
-            lr = optimizer.param_groups[0]["lr"]
-        else:
-            lr = list(optimizer_dict.values())[0].param_groups[0]["lr"]
+        lr = optimizer.param_groups[0]["lr"]
         
         tokens_in_update = tokens_seen - tokens_seen_before
         tokens_seen_before = tokens_seen
@@ -838,22 +729,14 @@ def main(args):
         if global_rank == 0:
             if 'poet' in args.optimizer.lower():
                 poet_lr = next((pg['lr'] for pg in optimizer.param_groups if pg.get('use_poet')), None)
-                wandb.log({
-                    "poet_lr": poet_lr,
-                    },
-                    step=global_step,
-                )
-            wandb.log({
-                "loss": loss.item(),
-                "lr": lr,
-                "update_step": update_step,
-                "tokens_seen": tokens_seen,
-                "throughput_tokens": tokens_in_update / update_time,
-                "throughput_examples": args.total_batch_size / update_time,
-                "throughput_batches": batches_in_update / update_time,
-                },
-                step=global_step,
-            )
+                logger.info(f"Poet LR: {poet_lr}")
+
+            logger.info(f"Update step {update_step}, global step {global_step}, "
+                        f"loss: {loss.item():.4f}, lr: {lr:.2e}, tokens seen: {tokens_seen}, "
+                        f"throughput (token/s): {tokens_in_update / update_time:.2f}, "
+                        f"throughput (examples): {args.total_batch_size / update_time:.2f}, "
+                        f"throughput (batches): {batches_in_update / update_time:.2f}")
+
         update_time = time.time()
 
     # ##############################
@@ -893,7 +776,6 @@ def main(args):
                 "update_step": update_step,
                 "global_step": global_step,
                 "config": run_config,
-                "wandb": wandb.run.dir,
                 "dtype": args.dtype,
             }
             torch.save(optimizer_checkpoint, f"{current_model_directory}/optimizer.pt")
@@ -920,14 +802,7 @@ def main(args):
     )
 
     if global_rank == 0:
-        wandb.log({
-            "final_eval_loss": total_loss,
-            "final_eval_perplexity": perplexity,
-            "final_eval_tokens": evaluated_on_tokens,
-            },
-            step=global_step,
-        )
-        logger.info(f"Final eval loss: {total_loss}")
+        logger.info(f"Final eval loss: {total_loss}, perplexity: {perplexity:.2f}, evaluated tokens: {evaluated_on_tokens}")
 
     logger.info("Script finished successfully")
     print(f"Rank {global_rank} finished successfully")

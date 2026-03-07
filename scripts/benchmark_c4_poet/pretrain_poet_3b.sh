@@ -17,5 +17,4 @@ torchrun --standalone --nproc_per_node 8 torchrun_main.py \
     --poet_lr 0.0005 \
     --poet_reset_gap 200 \
     --poet_block_size 512 \
-    --poet_scale_mode 1 \
     --init_type normalized \

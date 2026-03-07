@@ -12,7 +12,7 @@ def check_args_torchrun_main(args):
             )
         elif 'poet' in args.optimizer.lower():
             args.run_name = (
-                f"{args.optimizer}-lr-{args.lr}-poet_lr-{args.poet_lr}-poet_scale_mode-{args.poet_scale_mode}-min_lr_ratio-{args.min_lr_ratio}-wd-{args.weight_decay}-warmup-{args.warmup_steps}-max_length-{args.max_length}-bs-{args.batch_size}"
+                f"{args.optimizer}-lr-{args.lr}-poet_lr-{args.poet_lr}-min_lr_ratio-{args.min_lr_ratio}-wd-{args.weight_decay}-warmup-{args.warmup_steps}-max_length-{args.max_length}-bs-{args.batch_size}"
                 f"-init_type-{args.init_type}-block_size-{args.poet_block_size}"
             )
             if args.poet_mem_efficient_mode:
@@ -51,10 +51,6 @@ def check_args_torchrun_main(args):
 
         # if args.poet_balance_lr:
         #     args.run_name += "-balance_lr"
-
-        if args.init_type == 'mup_normalized':
-            args.run_name += f"-mup_alpha-{args.mup_alpha}"
-
 
         if args.poet_use_rmsnorm:
             args.run_name += "-use_rmsnorm"

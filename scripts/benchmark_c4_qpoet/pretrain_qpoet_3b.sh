@@ -19,5 +19,4 @@ torchrun --standalone --nproc_per_node 8 torchrun_main.py \
     --poet_block_size 256 \
     --init_type normalized \
     --weight_quant \
-    --poet_scale_mode 1 \
     --gd_warmup_steps 10000
