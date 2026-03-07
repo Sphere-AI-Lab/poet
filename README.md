@@ -148,14 +148,14 @@ where $W_0 \in \mathbb{R}^{m \times n}$ is a **fixed** randomly initialized matr
 **Why orthogonal transformations?** They preserve singular values exactly — giving POET direct, provable control over the weight spectrum throughout training.
 
 <p align="center">
-  <img src="assets/poet/sv_comp.png" alt="Singular value dynamics" width="75%">
+  <img src="assets/poet/sv_comp.png" alt="Singular value dynamics" width="55%">
   <br><em>Dynamics of singular values: POET (right) avoids the large singular value growth seen in standard AdamW training (left).</em>
 </p>
 
 ### Spectral Diversity
 
 <p align="center">
-  <img src="assets/poet/svd_entropy.png" alt="SVD entropy comparison" width="65%">
+  <img src="assets/poet/svd_entropy.png" alt="SVD entropy comparison" width="90%">
   <br><em>POET maintains consistently higher SVD entropy (singular value diversity) throughout training compared to AdamW and Muon.</em>
 </p>
 
@@ -167,7 +167,7 @@ Large orthogonal matrices $R \in \mathbb{R}^{m \times m}$ are expensive to optim
 - **POET-BS** (Block-Stochastic SPO): Block-diagonal structure with random permutations; transforms all dimensions simultaneously. More expressive per parameter.
 
 <p align="center">
-  <img src="assets/poet/block_pattern.png" alt="Weight update patterns" width="70%">
+  <img src="assets/poet/block_pattern.png" alt="Weight update patterns" width="85%">
   <br><em>Weight update coverage: POET-BS achieves more even updates across all weight elements compared to POET-FS.</em>
 </p>
 
@@ -180,10 +180,12 @@ A **merge-then-reinitialize** trick periodically absorbs $R, P$ into $W_0$, prev
 ### Results
 
 <p align="center">
-  <img src="assets/poet/val_ppl.png" alt="Validation perplexity vs parameters" width="75%">
+  <img src="assets/poet/val_ppl.png" alt="Validation perplexity vs parameters" width="60%">
   <br><em>POET outperforms AdamW with significantly fewer trainable parameters across all LLaMA model sizes on C4.</em>
 </p>
 
+<div align="center">
+  
 | Method | Params | 60M PPL | 130M PPL | 350M PPL | 1.3B PPL |
 |---|---|---|---|---|---|
 | AdamW | Full | 26.68 | 20.82 | 16.78 | 14.73 |
@@ -192,8 +194,11 @@ A **merge-then-reinitialize** trick periodically absorbs $R, P$ into $W_0$, prev
 | POET-BS (b=128) | ~13% | **26.90** | **21.86** | **18.05** | **16.24** |
 | POET-BS (b=256) | ~26% | **25.29** | **19.88** | **16.27** | **14.56** |
 
+<em>Quantitative comparison of validation perplexity</em>
+</div>
+
 <p align="center">
-  <img src="assets/poet/ablation_training_speedup.png" alt="Training speedup" width="65%">
+  <img src="assets/poet/ablation_training_speedup.png" alt="Training speedup" width="35%">
   <br><em>POET-FS (b=1/2) still outperforms AdamW even when AdamW is trained with ~3× more tokens.</em>
 </p>
 
@@ -209,32 +214,32 @@ POET-X is a **scalable, memory-efficient** variant of POET that makes orthogonal
 ### Key Results
 
 <p align="center">
-  <img src="assets/poetx/latency_breakdown.png" alt="Latency breakdown" width="80%">
+  <img src="assets/poetx/latency_breakdown.png" alt="Latency breakdown" width="55%">
   <br><em>Latency breakdown: POET-X reduces forward+backward latency from 10.59ms (POET) to 1.38ms (POET-Xfast), approaching standard linear layers.</em>
 </p>
 
 <p align="center">
-  <img src="assets/poetx/mem_breakdown.png" alt="Memory breakdown" width="80%">
+  <img src="assets/poetx/mem_breakdown.png" alt="Memory breakdown" width="55%">
   <br><em>Memory breakdown for Llama-8B training on a single GPU. POET-X_mem achieves PEFT-level memory; POET runs OOM.</em>
 </p>
 
 ### Pretraining Results
 
 <p align="center">
-  <img src="assets/poetx/ppl_results.png" alt="PPL results" width="75%">
+  <img src="assets/poetx/ppl_results.png" alt="PPL results" width="45%">
   <br><em>Llama-3B pretraining on 60B C4 tokens: POET-X achieves better PPL than AdamW and all memory-efficient baselines.</em>
 </p>
 
 <p align="center">
-  <img src="assets/poetx/ppl_results_q.png" alt="PPL results quantized" width="75%">
+  <img src="assets/poetx/ppl_results_q.png" alt="PPL results quantized" width="45%">
   <br><em>POET-XQ (quantized): Best PPL of 14.78 with minimal memory footprint, outperforming GaLore and APOLLO.</em>
 </p>
 
 Training dynamics with different block sizes:
 
 <p align="center">
-  <img src="assets/poetx/val_ppl_256.png" alt="Val PPL b=256" width="48%">
-  <img src="assets/poetx/val_ppl_1024.png" alt="Val PPL b=1024" width="48%">
+  <img src="assets/poetx/val_ppl_256.png" alt="Val PPL b=256" width="30%">
+  <img src="assets/poetx/val_ppl_1024.png" alt="Val PPL b=1024" width="30%">
   <br><em>Validation PPL curves at block size b=256 (left) and b=1024 (right).</em>
 </p>
 
@@ -248,7 +253,7 @@ Training dynamics with different block sizes:
 ### Throughput & Distributed Scaling
 
 <p align="center">
-  <img src="assets/poetx/throughput_scale.png" alt="Throughput scaling" width="72%">
+  <img src="assets/poetx/throughput_scale.png" alt="Throughput scaling" width="75%">
   <br><em>POET-X closely follows ideal linear scaling on 64× H100s, while AdamW (FSDP) plateaus due to communication overhead.</em>
 </p>
 
@@ -268,17 +273,21 @@ Four engineering innovations:
 4. **Fused Cayley-Neumann Kernels** — Triton kernel loads $Q$ and $Q^2$ into shared memory once for all terms; backward pass also fused.
 
 <p align="center">
-  <img src="assets/poetx/cayley.png" alt="Cayley-Neumann illustration" width="70%">
+  <img src="assets/poetx/cayley.png" alt="Cayley-Neumann illustration" width="45%">
   <br><em>Fused Cayley-Neumann parameterization: batch-wise implementation via Triton kernel fusion.</em>
 </p>
 
 ### POET-X Variants
 
+<div align="center">
+  
 | Variant | Memory | Speed | Notes |
 |---|---|---|---|
 | `POET-X_fast` | Medium | Fast | Standard autograd, saves activation $b$ |
 | `POET-X_mem` | **Lowest** | Moderate | Gradient checkpointing, recomputes $b$ on-the-fly |
 | `POET-XQ` | **Lowest** | High throughput | INT8 quantized base weights, dequantized on-the-fly |
+
+</div>
 
 ---
 
