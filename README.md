@@ -296,14 +296,11 @@ Four engineering innovations:
   year={2025}
 }
 
-@misc{qiu2026poetxmemoryefficientllmtraining,
-      title={POET-X: Memory-efficient LLM Training by Scaling Orthogonal Transformation}, 
-      author={Zeju Qiu and Lixin Liu and Adrian Weller and Han Shi and Weiyang Liu},
-      year={2026},
-      eprint={2603.05500},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2603.05500}, 
+@article{qiu2025poetx,
+  title={POET-X: Memory-efficient LLM Training by Scaling Orthogonal Transformation}, 
+  author={Qiu, Zeju and Liu, Lixin and Weller, Adrian and Shi, Han and Liu, Weiyang},
+  journal={arXiv preprint arXiv:2603.05500},
+  year={2026},
 }
 ```
 
