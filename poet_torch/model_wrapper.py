@@ -18,6 +18,7 @@ from poet_torch.utils.model_utils import (
     merge_and_reinitialize,
     get_model_info,
     get_poet_params,
+    print_model_info,
 )
 
 logger = logging.getLogger(__name__)
@@ -138,20 +139,7 @@ class POETModel(nn.Module):
 
     def print_model_info(self) -> None:
         """Print formatted model information."""
-        info = self.get_model_info()
-        
-        print("=" * 60)
-        print("POET Model Information")
-        print("=" * 60)
-        print(f"Total parameters:        {info['total_params']:,}")
-        print(f"Trainable parameters:    {info['trainable_params']:,}")
-        print(f"  - Base parameters:     {info['base_params']:,}")
-        print(f"  - POET parameters:     {info['poet_params']:,}")
-        print(f"POET layers:             {info['poet_layers']}")
-        print(f"POET percentage:         {info['poet_percentage']:.2f}%")
-        if self.is_quantized:
-            print(f"Quantization:            {self.config.weight_bits}-bit")
-        print("=" * 60)
+        print_model_info(self.base_model)
 
     def get_effective_weights(self) -> dict:
         """Get effective weights for all POET layers.

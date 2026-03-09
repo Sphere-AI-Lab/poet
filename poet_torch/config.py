@@ -29,9 +29,6 @@ class POETConfig:
         poet_scale: Scaling factor for POET learning rate adjustment. Default: 0.5.
         weight_decay: Weight decay for base parameters. POET parameters use no
             weight decay. Default: 0.0.
-        grad_clip: Maximum gradient norm for clipping. Default: 1.0.
-        warmup_steps: Number of warmup steps for gradient clipping schedule.
-            Default: 50.
         target_modules: List of module names to replace with POET layers. If None,
             replaces all Linear layers except lm_head. Default: None.
         exclude_modules: List of module names to exclude from replacement.
@@ -64,16 +61,12 @@ class POETConfig:
     
     # Training schedule
     merge_interval: int = 200
-    warmup_steps: int = 50
     
     # Learning rates and optimization
     poet_lr: float = 5e-4
     base_lr: float = 1e-3
     poet_scale: float = 0.5
     weight_decay: float = 0.0
-    
-    # Gradient clipping
-    grad_clip: float = 1.0
     
     # Model modification
     target_modules: Optional[List[str]] = None

@@ -283,7 +283,7 @@ def merge_and_reinitialize(
     return True
 
 
-def get_poet_grad_clipping_value(
+def calc_poet_grad_clipping_value(
     global_step: int,
     grad_clipping: float,
     warmup_steps: int,

@@ -8,7 +8,7 @@ Usage:
 
 import argparse
 import random
-from typing import Iterator
+from typing import Iterator, Tuple
 
 import numpy as np
 import torch
@@ -19,12 +19,12 @@ from peft_pretraining.modeling_llama import LlamaForCausalLM
 from peft_pretraining import training_utils
 
 from poet_torch import (
+    POETConfig,
+    QPOETConfig,
+    POETModel,
     POETAdamW,
-    QPOETLinear,
-    check_and_merge,
-    get_grad_clipping_value,
-    prepare_model_for_int8_training_poet,
-    replace_linear_with_poet,
+    get_poet_optimizer,
+    calc_poet_grad_clipping_value,
 )
 
 
@@ -66,13 +66,12 @@ def parse_args():
     parser.add_argument("--grad_clipping", type=float, default=1.0)
     
     # POET specific
-    parser.add_argument("--poet_reset_gap", type=int, default=20, help="Merge-then-reinitialize gap")
+    parser.add_argument("--poet_merge_interval", type=int, default=20, help="Merge-then-reinitialize gap")
     parser.add_argument("--poet_block_size", type=int, default=64, help="POET block size")
     parser.add_argument("--poet_mem_efficient_mode", action="store_true")
     parser.add_argument("--gd_warmup_steps", type=int, default=50)
     
     # QPOET specific
-    parser.add_argument("--weight_quant", action="store_true", help="Use QPOET (INT8)")
     parser.add_argument("--weight_bits", type=int, default=8)
     parser.add_argument("--weight_group_size", type=int, default=64)
     
@@ -94,87 +93,49 @@ def parse_args():
     return args
 
 
-def setup_model_and_optimizer(args, device):
+def setup_model_and_optimizer(args, device) -> Tuple[POETModel, POETAdamW, POETConfig]:
     """Setup model and optimizer."""
-    print("Setup Model")
+    print("Loading base model...")
     model_config = AutoConfig.from_pretrained(args.model_config)
-    model = LlamaForCausalLM(model_config)
+    base_model = LlamaForCausalLM(model_config)
     
-    print("Setup POET")
+    print("Setting up POET...")
     if args.optimizer == "poet":
-        # Replace linear layers with POET layers
-        replace_linear_with_poet(
-            model, 
-            args.poet_block_size,
-            args.init_type,
-            device=device,
-            dtype=torch.bfloat16 if args.dtype == "bfloat16" else torch.float32,
-            mem_efficient_mode=args.poet_mem_efficient_mode
+        # Create POET config
+        config = POETConfig(
+            block_size=args.poet_block_size,
+            merge_interval=args.poet_merge_interval,
+            poet_lr=args.poet_lr,
+            base_lr=args.lr,
+            weight_decay=args.weight_decay,
+            mem_efficient_mode=args.poet_mem_efficient_mode,
+            init_type=args.init_type,
         )
-        
-        # Collect parameters
-        poet_params = [p for n, p in model.named_parameters() if p.requires_grad and 'oft' in n]
-        id_poet = {id(p) for p in poet_params}
-        
-        decay_params = []
-        nodecay_params = []
-        for n, p in model.named_parameters():
-            if not p.requires_grad or id(p) in id_poet:
-                continue
-            if p.ndim >= 2 and not n.endswith('bias'):
-                decay_params.append(p)
-            else:
-                nodecay_params.append(p)
-        
-        param_groups = [
-            dict(params=nodecay_params, weight_decay=0.0, lr=args.lr),
-            dict(params=decay_params, weight_decay=args.weight_decay, lr=args.lr),
-            dict(params=poet_params, weight_decay=0.0, lr=args.poet_lr,
-                 use_poet=True, poet_reset_gap=args.poet_reset_gap, poet_scale=0.5),
-        ]
-        
     else:  # q_poet
-        # Prepare for INT8 training
-        dummy_args = type('Args', (), {
-            'poet_block_size': args.poet_block_size,
-            'weight_bits': args.weight_bits,
-            'weight_group_size': args.weight_group_size,
-            'stochastic_round': True,
-            'init_type': args.init_type,
-        })()
-        
-        target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'up_proj', 'down_proj', 'gate_proj']
-        model = prepare_model_for_int8_training_poet(model, dummy_args, target_modules)
-        
-        # Collect parameters
-        qpoet_params = [p for n, p in model.named_parameters() if p.requires_grad and 'oft' in n]
-        id_qpoet = {id(p) for p in qpoet_params}
-        
-        decay_params = []
-        nodecay_params = []
-        for n, p in model.named_parameters():
-            if not p.requires_grad or id(p) in id_qpoet:
-                continue
-            if p.ndim >= 2 and not n.endswith('bias'):
-                decay_params.append(p)
-            else:
-                nodecay_params.append(p)
-        
-        param_groups = [
-            dict(params=nodecay_params, weight_decay=0.0, lr=args.lr),
-            dict(params=decay_params, weight_decay=args.weight_decay, lr=args.lr),
-            dict(params=qpoet_params, weight_decay=0.0, lr=args.poet_lr,
-                 use_poet=True, poet_reset_gap=args.poet_reset_gap, poet_scale=0.5),
-        ]
+        # Create QPOET config
+        config = QPOETConfig(
+            block_size=args.poet_block_size,
+            merge_interval=args.poet_merge_interval,
+            poet_lr=args.poet_lr,
+            base_lr=args.lr,
+            weight_decay=args.weight_decay,
+            init_type=args.init_type,
+            weight_bits=args.weight_bits,
+            weight_group_size=args.weight_group_size,
+        )
     
-    print("Setup Optimizer")
-    optimizer = POETAdamW(param_groups, lr=args.lr, weight_decay=args.weight_decay,
-                          poet_block_size=args.poet_block_size)
+    # Wrap model with POET
+    model = POETModel(base_model, config)
     
-    return model, optimizer
+    # Create optimizer
+    print("Setting up optimizer...")
+    optimizer = get_poet_optimizer(model, config)
+    
+    return model, optimizer, config
+
 
 def setup_dataloader(args):
-    # Create dummy dataset
+    """Setup training and evaluation dataloaders."""
     model_config = AutoConfig.from_pretrained(args.model_config)
     dataset = DummyDataset(
         vocab_size=model_config.vocab_size,
@@ -183,7 +144,7 @@ def setup_dataloader(args):
     )
     dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=0)
     eval_dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=0)
-
+    
     return dataloader, eval_dataloader
 
 
@@ -235,22 +196,16 @@ def main():
     print("=" * 50)
     
     # Setup model and optimizer
-    model, optimizer = setup_model_and_optimizer(args, device)
+    model, optimizer, config = setup_model_and_optimizer(args, device)
     
     # Move to device
     dtype = torch.bfloat16 if args.dtype == "bfloat16" else torch.float32
     model = model.to(device=device, dtype=dtype)
     
-    # Move QPOET buffers
-    for module in model.modules():
-        if isinstance(module, QPOETLinear):
-            module.weight_scales = module.weight_scales.to(device)
-            module.weight_zeros = module.weight_zeros.to(device)
-    
     # Load checkpoint if continuing
     global_step = 0
     update_step = 0
-
+    
     # Compile model
     torch.compiler.reset()
     model = torch.compile(model)
@@ -263,8 +218,9 @@ def main():
         warmup_steps=args.warmup_steps,
         min_lr_ratio=args.min_lr_ratio,
     )
-
+    
     dataloader, eval_dataloader = setup_dataloader(args)
+    
     # Training loop
     model.train()
     
@@ -292,10 +248,15 @@ def main():
             params = []
             for group in optimizer.param_groups:
                 params.extend(group['params'])
-            clip_val = get_grad_clipping_value(
-                update_step, args.grad_clipping, 10, args.poet_reset_gap, 0.1, args.gd_warmup_steps
+            clip_value = calc_poet_grad_clipping_value(
+                global_step=update_step,
+                grad_clipping=args.grad_clipping,
+                warmup_steps=10,
+                poet_merge_interval=args.poet_merge_interval,
+                min_ratio=0.1,
+                max_steps=args.gd_warmup_steps
             )
-            torch.nn.utils.clip_grad_norm_(params, clip_val)
+            torch.nn.utils.clip_grad_norm_(params, clip_value)
         
         # Optimizer step
         optimizer.step()
@@ -303,7 +264,7 @@ def main():
         optimizer.zero_grad()
         
         # Check and merge
-        check_and_merge(model, update_step + 1, args.poet_reset_gap)
+        model.merge_if_needed(update_step + 1)
         
         update_step += 1
         
