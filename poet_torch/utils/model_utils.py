@@ -287,33 +287,33 @@ def get_poet_grad_clipping_value(
     global_step: int,
     grad_clipping: float,
     warmup_steps: int,
-    poet_reset_gap: int,
+    poet_merge_interval: int,
     min_ratio: float = 0.1,
     max_steps: int = 2000,
 ) -> float:
     """Calculate gradient clipping value with warmup.
     
     The clipping value linearly increases from min_ratio * grad_clipping
-    to grad_clipping over warmup_steps, repeating every poet_reset_gap steps.
+    to grad_clipping over warmup_steps, repeating every poet_merge_interval steps.
     
     Args:
         global_step: Current training step.
         grad_clipping: Maximum gradient clipping value.
         warmup_steps: Number of steps for linear warmup.
-        poet_reset_gap: Period for repeating warmup cycle.
+        poet_merge_interval: Period for repeating warmup cycle.
         min_ratio: Starting ratio of grad_clipping.
         max_steps: Maximum steps to apply gradient clipping.
         
     Returns:
         Current gradient clipping value.
     """
-    if global_step < poet_reset_gap:
+    if global_step < poet_merge_interval:
         return grad_clipping
 
     if global_step > max_steps:
         return grad_clipping
 
-    cycle_position = global_step % poet_reset_gap
+    cycle_position = global_step % poet_merge_interval
     
     if cycle_position >= warmup_steps:
         return grad_clipping

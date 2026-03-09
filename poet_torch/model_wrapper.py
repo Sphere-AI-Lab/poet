@@ -9,7 +9,7 @@ from typing import Union
 import torch
 import torch.nn as nn
 
-from poet_torch.adamw import POETAdamW
+from poet_torch.optim.adamw import POETAdamW
 from poet_torch.config import POETConfig, QPOETConfig
 from poet_torch.layers import POETLinear, QPOETLinear
 from poet_torch.utils.model_utils import (
@@ -201,8 +201,7 @@ def get_poet_optimizer(model: nn.Module, config: Union[POETConfig, QPOETConfig])
         lr=config.base_lr,
         weight_decay=config.weight_decay,
         poet_scale=config.poet_scale,
-        poet_reset_gap=config.merge_interval, 
-        poet_block_size=config.block_size,
+        poet_merge_interval=config.merge_interval, 
     )
 
     return optimizer

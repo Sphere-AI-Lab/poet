@@ -15,6 +15,6 @@ torchrun --standalone --nproc_per_node 8 torchrun_main.py \
     --save_every 10000000 \
     --optimizer poet \
     --poet_lr 0.0005 \
-    --poet_reset_gap 200 \
+    --poet_merge_interval 200 \
     --poet_block_size 512 \
     --init_type normalized \

@@ -27,9 +27,8 @@ class POETAdamW(Optimizer):
         eps: Adam's epsilon for numerical stability. Default: 1e-6.
         weight_decay: Decoupled weight decay to apply. Default: 0.0.
         correct_bias: Whether to correct bias in Adam. Default: True.
-        poet_reset_gap: Steps between resetting optimizer state for POET params.
+        poet_merge_interval: Steps between resetting optimizer state for POET params.
             Default: 0 (disabled).
-        poet_block_size: Block size for POET transformations. Default: 256.
     """
 
     def __init__(
@@ -41,8 +40,7 @@ class POETAdamW(Optimizer):
         weight_decay: float = 0.0,
         correct_bias: bool = True,
         poet_scale: float = 0.5,
-        poet_reset_gap: int = 0,
-        poet_block_size: int = 256,
+        poet_merge_interval: int = 0,
     ):
 
         if lr < 0.0:
@@ -61,8 +59,7 @@ class POETAdamW(Optimizer):
             "weight_decay": weight_decay,
             "correct_bias": correct_bias,
             "poet_scale": poet_scale,
-            "poet_reset_gap": poet_reset_gap,
-            "poet_block_size": poet_block_size,
+            "poet_merge_interval": poet_merge_interval,
         }
         super().__init__(params, defaults)
 
@@ -100,12 +97,14 @@ class POETAdamW(Optimizer):
                     state["exp_avg_sq"] = torch.zeros_like(p)
 
                 # Check if reset should be applied based on global counter
-                reset_gap = 0
+                merge_interval = 0
                 if group.get("use_poet", False):
-                    reset_gap = group.get("poet_reset_gap", 200)
+                    merge_interval = group.get(
+                        "poet_merge_interval", self.defaults["poet_merge_interval"]
+                    )
                 if (
-                    reset_gap > 0
-                    and self.global_step_counter % reset_gap == 0
+                    merge_interval > 0
+                    and self.global_step_counter % merge_interval == 0
                     and self.global_step_counter > 0
                 ):
                     state["step"] = 0
@@ -130,7 +129,7 @@ class POETAdamW(Optimizer):
                 
                 # Apply POET-specific learning rate scaling if enabled
                 if group.get("use_poet", False):
-                    poet_scale = group.get("poet_scale", 1.0)
+                    poet_scale = group.get("poet_scale", self.defaults["poet_scale"])
                     if poet_scale > 0.0:
                         lr_eff = lr_eff * poet_scale
                 
