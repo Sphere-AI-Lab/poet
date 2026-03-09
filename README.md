@@ -46,6 +46,8 @@ This repository contains the official implementation of **POET** and **POET-X** 
   <br><em>POET's three learning phases: conical shell searching → stable learning → final adjusting.</em>
 </p>
 
+**Since POEX-X is an efficient version of POET without any approximation involved. Our repo will only provide the implementation of POET-X. The original implementation of POET is obsolete.**
+
 ---
 
 ## Installation
