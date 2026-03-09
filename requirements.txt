@@ -1,4 +1,2 @@
-torch
-transformers
-datasets
-triton
+torch>=2.7.0
+triton>=3.4.0
