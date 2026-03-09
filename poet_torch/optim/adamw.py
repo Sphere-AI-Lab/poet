@@ -67,9 +67,6 @@ class POETAdamW(Optimizer):
         super().__init__(params, defaults)
 
         self.global_step_counter = 0
-        self.poet_reset_gap = poet_reset_gap
-        self.poet_scale = poet_scale
-        self.poet_block_size = poet_block_size
 
     @torch.no_grad()
     def step(self, closure: Optional[Callable] = None) -> Optional[torch.Tensor]:
@@ -105,7 +102,7 @@ class POETAdamW(Optimizer):
                 # Check if reset should be applied based on global counter
                 reset_gap = 0
                 if group.get("use_poet", False):
-                    reset_gap = group.get("poet_reset_gap", self.poet_reset_gap)
+                    reset_gap = group.get("poet_reset_gap", 200)
                 if (
                     reset_gap > 0
                     and self.global_step_counter % reset_gap == 0
@@ -133,7 +130,7 @@ class POETAdamW(Optimizer):
                 
                 # Apply POET-specific learning rate scaling if enabled
                 if group.get("use_poet", False):
-                    poet_scale = group.get("poet_scale", self.poet_scale)
+                    poet_scale = group.get("poet_scale", 1.0)
                     if poet_scale > 0.0:
                         lr_eff = lr_eff * poet_scale
                 
