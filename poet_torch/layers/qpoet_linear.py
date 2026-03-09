@@ -79,7 +79,7 @@ class QPOETLinear(nn.Module):
                 weight.data if isinstance(weight, nn.Parameter) else weight,
                 q_group_size=group_size
             )
-            self.weight = nn.Parameter(int8_weight, requires_grad=False, device=device)
+            self.weight = nn.Parameter(int8_weight, requires_grad=False).to(device=device)
             self.register_buffer("weight_scales", scales.to(device))
             self.register_buffer("weight_zeros", zeros.to(device))
         else:

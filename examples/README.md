@@ -2,7 +2,7 @@
 
 This directory contains simple examples demonstrating the `poet_torch` API.
 
-## Quick Start
+## 1. Quick Start
 
 
 ```python
@@ -25,30 +25,12 @@ for step, batch in enumerate(dataloader):
     model.merge_if_needed(step)  # Automatic merge
 ```
 
-## Simple POET Example (`1_toy.py`)
-
-A minimal single-GPU training example using the `POETModel` wrapper:
-
-```bash
-cd examples
-python 1_toy.py --model_config configs/llama_250m.json
-```
-
 - Using `POETConfig` for configuration
 - Wrapping a model with `POETModel`
 - Using `get_poet_optimizer()` for automatic optimizer setup
 - Automatic merge with `model.merge_if_needed(step)`
 
-
-## More to explore:
-- Manual layer replacement with `replace_linear_with_poet()`
-- Custom parameter groups
-- Memory-efficient mode (`mem_efficient_mode=True`)
-- Targeted module replacement
-- Manual merge with `merge_and_reinitialize()`
-- ...
-
-## API Overview
+## 2. API Overview
 
 ### Configuration
 
@@ -122,8 +104,87 @@ from poet_torch import merge_and_reinitialize
 merged = merge_and_reinitialize(model, step, merge_interval=200)
 ```
 
-## Notes
+### More to explore:
+- Manual layer replacement with `replace_linear_with_poet()`
+- Custom parameter groups
+- Memory-efficient mode (`mem_efficient_mode=True`)
+- Targeted module replacement
+- Manual merge with `merge_and_reinitialize()`
+- ...
+
+## 3. Simple POET Example (`1_toy.py`)
+
+A minimal single-GPU training example using the `POETModel` wrapper:
+
+```bash
+cd examples
+python 1_toy.py --model_config configs/llama_250m.json
+```
+
+
+
+
+## 4. Large-scale Pre-training with `torchrun_main.py`
+
+`torchrun_main.py` is a full-featured pretraining script supporting distributed training with DDP. It supports multiple optimizers including POET and QPOET.
+
+### Prerequisites
+
+1. Download and prepare the C4 dataset in `./c4/en/` directory
+2. Install dependencies: `pip install torch transformers datasets loguru tqdm`
+
+### Pretrain with POET (3B model on 8 GPUs)
+
+```bash
+cd examples
+torchrun --standalone --nproc_per_node 8 torchrun_main.py \
+    --model_config configs/llama_3b.json \
+    --lr 0.001 \
+    --batch_size 64 \
+    --total_batch_size 512 \
+    --max_length 256 \
+    --num_training_steps 600000 \
+    --warmup_steps 5000 \
+    --min_lr_ratio 0.01 \
+    --weight_decay 0.0 \
+    --grad_clipping 0.1 \
+    --dtype bfloat16 \
+    --eval_every 20000 \
+    --save_every 10000000 \
+    --optimizer poet \
+    --poet_lr 0.0005 \
+    --poet_merge_interval 200 \
+    --poet_block_size 512
+```
+
+### Pretrain with QPOET (W8 Quantized POET, 3B model on 8 GPUs)
+
+```bash
+cd examples
+torchrun --standalone --nproc_per_node 8 torchrun_main.py \
+    --model_config configs/llama_3b.json \
+    --lr 0.001 \
+    --batch_size 64 \
+    --total_batch_size 256 \
+    --max_length 256 \
+    --num_training_steps 100000 \
+    --warmup_steps 5000 \
+    --min_lr_ratio 0.01 \
+    --weight_decay 0.01 \
+    --grad_clipping 1.0 \
+    --dtype bfloat16 \
+    --eval_every 5000 \
+    --save_every 10000000 \
+    --optimizer q_poet \
+    --poet_lr 0.0005 \
+    --poet_merge_interval 400 \
+    --poet_block_size 256 \
+    --gd_warmup_steps 10000
+```
+
+### Notes
 
 - POET requires dimensions to be divisible by `block_size`
 - The `lm_head` layer is excluded by default
 - Use `mem_efficient_mode=True` for large models to save memory
+- QPOET uses INT8 quantization for additional memory savings
