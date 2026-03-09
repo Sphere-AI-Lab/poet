@@ -33,8 +33,6 @@ class POETConfig:
             replaces all Linear layers except lm_head. Default: None.
         exclude_modules: List of module names to exclude from replacement.
             Default: ["lm_head"].
-        init_type: Weight initialization type. Currently only "normalized" is
-            supported. Default: "normalized".
     
     Example:
         >>> from poet_torch import POETConfig

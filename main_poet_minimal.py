@@ -75,9 +75,6 @@ def parse_args():
     parser.add_argument("--weight_bits", type=int, default=8)
     parser.add_argument("--weight_group_size", type=int, default=64)
     
-    # Initialization
-    parser.add_argument("--init_type", type=str, default="normalized", choices=["normalized"])
-    
     # Scheduler
     parser.add_argument("--warmup_steps", type=int, default=10)
     parser.add_argument("--min_lr_ratio", type=float, default=0.1)
@@ -109,7 +106,6 @@ def setup_model_and_optimizer(args, device) -> Tuple[POETModel, POETAdamW, POETC
             base_lr=args.lr,
             weight_decay=args.weight_decay,
             mem_efficient_mode=args.poet_mem_efficient_mode,
-            init_type=args.init_type,
         )
     else:  # q_poet
         # Create QPOET config
@@ -119,7 +115,6 @@ def setup_model_and_optimizer(args, device) -> Tuple[POETModel, POETAdamW, POETC
             poet_lr=args.poet_lr,
             base_lr=args.lr,
             weight_decay=args.weight_decay,
-            init_type=args.init_type,
             weight_bits=args.weight_bits,
             weight_group_size=args.weight_group_size,
         )

@@ -8,43 +8,38 @@ def check_args_torchrun_main(args):
     if args.run_name is None:
         if 'adamw' in args.optimizer.lower() and 'apollo' not in args.optimizer.lower() and 'galore' not in args.optimizer.lower():
             args.run_name = (
-                f"{args.optimizer}-lr-{args.lr}-min_lr_ratio-{args.min_lr_ratio}-wd-{args.weight_decay}-warmup-{args.warmup_steps}-init_type-{args.init_type}-max_length-{args.max_length}-bs-{args.batch_size}"
+                f"{args.optimizer}-lr-{args.lr}-min_lr_ratio-{args.min_lr_ratio}-wd-{args.weight_decay}-warmup-{args.warmup_steps}--max_length-{args.max_length}-bs-{args.batch_size}"
             )
         elif 'poet' in args.optimizer.lower():
             args.run_name = (
                 f"{args.optimizer}-lr-{args.lr}-poet_lr-{args.poet_lr}-min_lr_ratio-{args.min_lr_ratio}-wd-{args.weight_decay}-warmup-{args.warmup_steps}-max_length-{args.max_length}-bs-{args.batch_size}"
-                f"-init_type-{args.init_type}-block_size-{args.poet_block_size}"
+                f"-block_size-{args.poet_block_size}"
             )
             if args.poet_mem_efficient_mode:
                 args.run_name += "-mem_efficient_mode"
         elif args.optimizer.lower() == "lora":
             args.run_name = (
                 f"{args.optimizer}-lr-{args.lr}-lora_r-{args.lora_r}-warmup-{args.warmup_steps}-max_length-{args.max_length}-bs-{args.batch_size}"
-                f"-init_type-{args.init_type}"
             )
         elif "apollo" in args.optimizer.lower():
             args.run_name = (
                 f"{args.optimizer}-lr-{args.lr}-apollo_scale-{args.apollo_scale}-rank-{args.rank}-scale_type-{args.scale_type}-proj-{args.proj}-update_proj_gap-{args.update_proj_gap}-warmup-{args.warmup_steps}-max_length-{args.max_length}-bs-{args.batch_size}"
-                f"-init_type-{args.init_type}"
             )
         # elif args.optimizer.lower() == "q_apollo":
         #     args.run_name = (
         #         f"q_apollo-lr-{args.lr}-apollo_scale-{args.apollo_scale}-rank-{args.rank}-scale_type-{args.scale_type}-proj-{args.proj}-update_proj_gap-{args.update_proj_gap}-warmup-{args.warmup_steps}-max_length-{args.max_length}-bs-{args.batch_size}"
-        #         f"-init_type-{args.init_type}"
         #     )
         elif "galore" in args.optimizer.lower():
             args.run_name = (
                 f"{args.optimizer}-lr-{args.lr}-galore_scale-{args.galore_scale}-rank-{args.rank}-update_proj_gap-{args.update_proj_gap}-warmup-{args.warmup_steps}-max_length-{args.max_length}-bs-{args.batch_size}"
-                f"-init_type-{args.init_type}"
             )
         # elif args.optimizer.lower() == "q_galore_adamw8bit":
         #     args.run_name = (
         #         f"q_galore_adamw8bit-lr-{args.lr}-warmup-{args.warmup_steps}-max_length-{args.max_length}-bs-{args.batch_size}"
-        #         f"-init_type-{args.init_type}"
         #     )
         elif args.optimizer.lower() == "muon":
             args.run_name = (
-                f"{args.optimizer}-lr-{args.lr}-min_lr_ratio-{args.min_lr_ratio}-wd-{args.weight_decay}-warmup-{args.warmup_steps}-init_type-{args.init_type}-max_length-{args.max_length}-bs-{args.batch_size}"
+                f"{args.optimizer}-lr-{args.lr}-min_lr_ratio-{args.min_lr_ratio}-wd-{args.weight_decay}-warmup-{args.warmup_steps}-max_length-{args.max_length}-bs-{args.batch_size}"
             )
         else:
             raise ValueError(f"Optimizer {args.optimizer} not supported")

@@ -136,7 +136,7 @@ class QPOETLinear(nn.Module):
         group_size: int = 256,
         num_bits: int = 8,
         mem_efficient_mode: bool = False,
-        normalize: bool = True,
+        normalize_weights: bool = True,
     ) -> "QPOETLinear":
         """Create a QPOETLinear layer from an existing Linear layer.
         
@@ -146,13 +146,13 @@ class QPOETLinear(nn.Module):
             group_size: Group size for quantization.
             num_bits: Number of bits for quantization.
             mem_efficient_mode: Whether to use memory-efficient mode.
-            normalize: Whether to normalize weights before quantization.
+            normalize_weights: Whether to normalize_weights weights before quantization.
             
         Returns:
             A new QPOETLinear layer with quantized weights.
         """
         weight = linear.weight.data
-        if normalize:
+        if normalize_weights:
             weight = weight / torch.norm(weight, dim=1, keepdim=True)
         
         bias_data = linear.bias.data if linear.bias is not None else None

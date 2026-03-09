@@ -182,8 +182,6 @@ def parse_args(args):
     # beta2 for AdamW
     parser.add_argument("--beta2", type=float, default=0.95)
 
-    parser.add_argument("--init_type", type=str, default="normalized", choices=["normalized", "same"])
-
     # POET parameters
     parser.add_argument("--poet_lr", type=float, default=1e-4)
     parser.add_argument("--poet_merge_interval", type=int, default=200, help="Merge-then-reinitialize interval")
@@ -366,7 +364,6 @@ def main(args):
             base_lr=args.lr,
             weight_decay=args.weight_decay,
             mem_efficient_mode=args.poet_mem_efficient_mode,
-            init_type=args.init_type,
         )
         logger.info("Using POET optimizer")
     elif args.optimizer.lower() == "q_poet":
@@ -376,7 +373,6 @@ def main(args):
             poet_lr=args.poet_lr,
             base_lr=args.lr,
             weight_decay=args.weight_decay,
-            init_type=args.init_type,
             weight_bits=args.weight_bits,
             weight_group_size=args.weight_group_size,
         )

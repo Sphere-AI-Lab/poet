@@ -130,7 +130,7 @@ def convert_to_qpoet(
     exclude_modules: Optional[List[str]] = None,
     group_size: int = 256,
     num_bits: int = 8,
-    normalize: bool = True,
+    normalize_weights: bool = True,
 ) -> Tuple[nn.Module, int]:
     """Convert nn.Linear layers to quantized QPOETLinear layers.
     
@@ -145,7 +145,7 @@ def convert_to_qpoet(
         exclude_modules: List of module names to exclude. Default: ["lm_head"].
         group_size: Group size for quantization. Default: 256.
         num_bits: Number of bits for quantization. Default: 8.
-        normalize: Whether to normalize weights before quantization. Default: True.
+        normalize_weights: Whether to normalize_weights weights before quantization. Default: True.
         
     Returns:
         Tuple of (modified_module, num_replaced_layers).
@@ -199,7 +199,7 @@ def convert_to_qpoet(
                     block_size=block_size,
                     group_size=group_size,
                     num_bits=num_bits,
-                    normalize=normalize,
+                    normalize_weights=normalize_weights,
                 )
                 
                 setattr(parent_module, name, poet_layer)

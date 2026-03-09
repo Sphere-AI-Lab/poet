@@ -91,7 +91,6 @@ class POETModel(nn.Module):
             target_modules=self.config.target_modules,
             exclude_modules=self.config.exclude_modules,
             mem_efficient_mode=self.config.mem_efficient_mode,
-            normalize_weights=self.config.init_type == "normalized",
         )
 
     def _setup_qpoet(self) -> None:
@@ -103,7 +102,6 @@ class POETModel(nn.Module):
             exclude_modules=self.config.exclude_modules,
             group_size=self.config.weight_group_size,
             num_bits=self.config.weight_bits,
-            normalize=self.config.init_type == "normalized",
         )
 
     def forward(self, *args, **kwargs):

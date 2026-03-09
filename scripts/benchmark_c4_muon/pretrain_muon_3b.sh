@@ -14,4 +14,3 @@ torchrun --standalone --nproc_per_node 8 torchrun_main.py \
     --eval_every 20000 \
     --save_every 10000000 \
     --optimizer muon \
-    --init_type same \

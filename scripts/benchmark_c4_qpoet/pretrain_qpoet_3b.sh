@@ -17,6 +17,5 @@ torchrun --standalone --nproc_per_node 8 torchrun_main.py \
     --poet_lr 0.0005 \
     --poet_merge_interval 400 \
     --poet_block_size 256 \
-    --init_type normalized \
     --weight_quant \
     --gd_warmup_steps 10000
