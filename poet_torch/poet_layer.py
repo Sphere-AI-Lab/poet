@@ -87,39 +87,6 @@ class POETLinear(nn.Module):
         self.register_buffer("perm_in_inv", torch.argsort(perm_in).to(torch.int32))
         self.register_buffer("perm_out_inv", torch.argsort(perm_out).to(torch.int32))
 
-    def random_init_parameters(self) -> None:
-        """Initialize parameters randomly."""
-        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        nn.init.normal_(self.oft_R[: self.r_in], std=1e-3)
-        nn.init.normal_(self.oft_R[self.r_in :], std=1e-3)
-        if self.bias is not None:
-            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-            nn.init.uniform_(self.bias, -bound, bound)
-
-    def perform_permutation(self) -> None:
-        """Apply current permutations to the weight matrix.
-        
-        This merges the permutations into the weight to avoid applying
-        them during forward pass.
-        """
-        W = self.weight
-        Wp = W.index_select(0, self.perm_out_inv).index_select(1, self.perm_in_inv)
-        self.weight.detach().copy_(Wp)
-
-    def update_permutation(self) -> None:
-        """Update the permutation buffers with new random permutations."""
-        device = self.weight.device
-        perm_in = torch.randperm(self.in_features, device=device)
-        self.perm_in.copy_(perm_in)
-        self.perm_in_inv.copy_(torch.argsort(perm_in))
-        perm_out = torch.randperm(self.out_features, device=device)
-        self.perm_out.copy_(perm_out)
-        self.perm_out_inv.copy_(torch.argsort(perm_out))
-
-        self.perform_permutation()
-
-
     @torch.no_grad()
     def merge_then_reinitialize(self) -> None:
         """Merge POET transformations into base weight and reinitialize.
