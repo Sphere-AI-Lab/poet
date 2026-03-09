@@ -119,7 +119,6 @@ def prepare_model_for_int8_training_poet(
                 bsz=args.poet_block_size,
                 num_bits=args.weight_bits,
                 group_size=args.weight_group_size,
-                stochastic_round=args.stochastic_round,
             )
             model._modules[name] = new_layers
 
@@ -128,7 +127,7 @@ def prepare_model_for_int8_training_poet(
 
 def check_and_merge(
     model: nn.Module, iter_count: int = 0, poet_reset_gap: int = 4
-) -> None:
+) -> bool:
     """Check if merge should be performed and execute it.
     
     This function checks if the current iteration count warrants a merge
@@ -139,17 +138,31 @@ def check_and_merge(
         model: Model containing POET layers.
         iter_count: Current iteration count.
         poet_reset_gap: Gap between merge operations.
+
+    Returns:
+        True if merge was performed, False otherwise.
+
+    Example:
+        >>> for step, batch in enumerate(dataloader):
+        ...     loss = model(batch)
+        ...     loss.backward()
+        ...     optimizer.step()
+        ...     
+        ...     # Merge every 20 steps
+        ...     merged = merge_and_reinitialize(model, step, 20)
+        ...     if merged:
+        ...         print(f"Merged at step {step}")   
     """
     if iter_count <= 0 or (iter_count % poet_reset_gap != 0):
-        return
+        return False
 
     is_dist = dist.is_available() and dist.is_initialized()
     rank = dist.get_rank() if is_dist else 0
 
     with torch.compiler.set_stance("eager_then_compile"):
-        for name, module in model.named_modules():
-            if isinstance(module, (POETLinear, QPOETLinear)) and module.block_size > 0:
-                with torch.no_grad():
+        with torch.no_grad():
+            for name, module in model.named_modules():
+                if isinstance(module, (POETLinear, QPOETLinear)) and module.block_size > 0:
                     if rank == 0:
                         module.merge_then_reinitialize()
 
@@ -170,41 +183,42 @@ def check_and_merge(
                         torch.distributed.broadcast(module.perm_out, src=0)
                         torch.distributed.broadcast(module.perm_out_inv, src=0)
 
-        if is_dist:
-            dist.barrier()
+            if is_dist:
+                dist.barrier()
 
+    return True
 
-def get_grad_clipping_value(
+def get_poet_grad_clipping_value(
     global_step: int,
     grad_clipping: float,
     warmup_steps: int,
-    period_T: int,
+    poet_reset_gap: int,
     min_ratio: float = 0.1,
     max_steps: int = 2000,
 ) -> float:
     """Calculate gradient clipping value with warmup.
     
     The clipping value linearly increases from min_ratio * grad_clipping
-    to grad_clipping over warmup_steps, repeating every period_T steps.
+    to grad_clipping over warmup_steps, repeating every poet_reset_gap steps.
     
     Args:
         global_step: Current training step.
         grad_clipping: Maximum gradient clipping value.
         warmup_steps: Number of steps for linear warmup.
-        period_T: Period for repeating warmup cycle.
+        poet_reset_gap: Period for repeating warmup cycle.
         min_ratio: Starting ratio of grad_clipping.
         max_steps: Maximum steps to apply gradient clipping.
         
     Returns:
         Current gradient clipping value.
     """
-    if global_step < period_T:
+    if global_step < poet_reset_gap:
         return grad_clipping
 
     if global_step > max_steps:
         return grad_clipping
 
-    cycle_position = global_step % period_T
+    cycle_position = global_step % poet_reset_gap
     
     if cycle_position >= warmup_steps:
         return grad_clipping

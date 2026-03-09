@@ -166,7 +166,6 @@ class QPOETLinear(nn.Module):
         dtype: Data type for trainable parameters.
         num_bits: Number of bits for quantization (default 8).
         group_size: Group size for quantization.
-        stochastic_round: Whether to use stochastic rounding.
         mem_efficient_mode: Whether to use memory-efficient mode.
     """
 
@@ -179,7 +178,6 @@ class QPOETLinear(nn.Module):
         dtype: Optional[torch.dtype] = None,
         num_bits: int = 8,
         group_size: int = 256,
-        stochastic_round: bool = True,
         mem_efficient_mode: bool = False,
     ) -> None:
         super().__init__()
@@ -198,7 +196,6 @@ class QPOETLinear(nn.Module):
         self.register_buffer("weight_zeros", zeros.to(device))
         self.weight_group_size = group_size
         self.weight_num_bits = num_bits
-        self.weight_stochastic_round = stochastic_round
 
         if num_bits != 8:
             raise NotImplementedError("Only 8-bit quantization is supported")
