@@ -121,9 +121,6 @@ cd examples
 python 1_toy.py --model_config configs/llama_250m.json
 ```
 
-
-
-
 ## 4. Large-scale Pre-training with `torchrun_main.py`
 
 `torchrun_main.py` is a full-featured pretraining script supporting distributed training with DDP. It supports multiple optimizers including POET and QPOET.

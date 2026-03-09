@@ -17,8 +17,7 @@
 
 - [Overview](#overview)
 - [Installation](#installation)
-- [Data Preparation](#data-preparation)
-- [Usage](#usage)
+- [Quick Start](#quick-start)
 - [POET](#poet)
   - [Method](#method)
   - [Spectral Diversity](#spectral-diversity)
@@ -65,7 +64,7 @@ pip install -e .
 
 ---
 
-## Data Preparation
+<!-- ## Data Preparation
 
 The training scripts expect the C4 dataset at `./c4/en/` relative to the repo root. Run the following commands **from the root of this repository**:
 
@@ -101,7 +100,7 @@ bash scripts/benchmark_c4_poet/pretrain_poet_3b.sh
 
 # Pretrain LLaMA-3B with POET-XQ (block_size=512) on C4
 bash scripts/benchmark_c4_qpoet/pretrain_qpoet_3b.sh
-```
+``` -->
 
 <!-- ### Using POET/POET-X for LLM Pretraining
 
@@ -134,6 +133,45 @@ from poet import merge_poet_weights
 model = merge_poet_weights(model)  # W ← R W_0 P
 model.save_pretrained("./my-pretrained-llm")
 ``` -->
+
+## Quick Start
+
+Get started with POET in just a few lines of code:
+
+```python
+from poet_torch import POETConfig, POETModel, get_poet_optimizer
+
+# 1. Configure POET
+config = POETConfig(
+    block_size=256,       # Block size for block-stochastic optimization
+    merge_interval=200,   # Steps between merge-then-reinitialize
+)
+
+# 2. Wrap your model with POET
+model = POETModel(your_model, config)
+
+# 3. Create optimizer (automatically handles orthogonal parameters)
+optimizer = get_poet_optimizer(model, lr=1e-3)
+
+# 4. Training loop
+for step, batch in enumerate(dataloader):
+    optimizer.zero_grad()
+    loss = model(**batch)
+    loss.backward()
+    optimizer.step()
+    model.merge_if_needed(step)  # Periodic merge (zero overhead after training)
+```
+
+### Key Components
+
+| Component | Description |
+|-----------|-------------|
+| `POETConfig` | Configuration for block size, merge interval, and variant selection |
+| `POETModel` | Wraps your model to apply Orthogonal Equivalence Transformation |
+| `get_poet_optimizer()` | Creates an optimizer tailored for POET's orthogonal parameters |
+| `merge_if_needed()` | Periodically absorbs orthogonal matrices into base weights |
+
+**📁 More Examples:** Explore comprehensive training scripts and additional APIs in the [`examples/`](examples/) directory. 
 
 ## POET
 
