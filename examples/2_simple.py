@@ -3,7 +3,7 @@
 This is a simplified single-GPU training script using a dummy dataset.
 
 Usage:
-    python main_poet_minimal.py --model_config configs/llama_20m.json --batch_size 2 --poet_block_size 16
+    python 2_simple.py --model_config configs/llama_20m.json --batch_size 2 --poet_block_size 16
 """
 
 import argparse

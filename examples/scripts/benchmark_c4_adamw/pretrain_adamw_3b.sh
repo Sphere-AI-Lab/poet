@@ -1,19 +1,17 @@
 # Running on 8 B200s
 torchrun --standalone --nproc_per_node 8 torchrun_main.py \
-    --model_config exmaples/configs/llama_3b.json \
-    --lr 0.001 \
+    --model_config configs/llama_3b.json \
+    --lr 0.0005 \
     --batch_size 64 \
     --total_batch_size 512 \
     --max_length 256 \
     --num_training_steps 600000 \
     --warmup_steps 5000 \
-    --min_lr_ratio 0.01 \
+    --min_lr_ratio 0.1 \
     --weight_decay 0.0 \
-    --grad_clipping 0.1 \
+    --grad_clipping 1.0 \
     --dtype bfloat16 \
     --eval_every 20000 \
     --save_every 10000000 \
-    --optimizer poet \
-    --poet_lr 0.0005 \
-    --poet_merge_interval 200 \
-    --poet_block_size 512 \
+    --optimizer adamw \
+    --init_type same \

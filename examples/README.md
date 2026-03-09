@@ -25,12 +25,13 @@ for step, batch in enumerate(dataloader):
     model.merge_if_needed(step)  # Automatic merge
 ```
 
-## Simple POET Example (`simple_example.py`)
+## Simple POET Example (`1_toy.py`)
 
 A minimal single-GPU training example using the `POETModel` wrapper:
 
 ```bash
-python examples/simple_example.py --model_config configs/llama_250m.json
+cd examples
+python 1_toy.py --model_config configs/llama_250m.json
 ```
 
 - Using `POETConfig` for configuration

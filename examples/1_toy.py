@@ -6,7 +6,7 @@ This is a minimal example showing how to use the new poet_torch API
 to train a model with POET optimizer.
 
 Usage:
-    python examples/basic_poet_example.py --model_config configs/llama_20m.json
+    python 1_toy.py --model_config configs/llama_20m.json
 """
 
 import argparse
