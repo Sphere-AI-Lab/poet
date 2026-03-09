@@ -35,15 +35,14 @@ from peft_pretraining import training_utils, args_utils
 from peft_pretraining.dataloader import PreprocessedIterableDataset
 from peft_pretraining.modeling_llama import LlamaForCausalLM
 
-
 from poet_torch import (
-    POETAdamW, 
-    replace_linear_with_poet, 
-    check_and_merge, 
-    get_grad_clipping_value, 
-    prepare_model_for_int8_training_poet, 
-    QPOETLinear,
+    POETConfig,
+    QPOETConfig,
+    POETModel,
+    get_poet_optimizer,
+    calc_poet_grad_clipping_value,
 )
+
 from MUON.muon_optimized import MuonOptimized
 
 transformers.logging.set_verbosity_error()
@@ -187,7 +186,7 @@ def parse_args(args):
 
     # POET parameters
     parser.add_argument("--poet_lr", type=float, default=1e-4)
-    parser.add_argument("--poet_reset_gap", type=int, default=200)
+    parser.add_argument("--poet_merge_interval", type=int, default=200, help="Merge-then-reinitialize interval")
     parser.add_argument("--poet_block_size", type=int, default=256)
     parser.add_argument("--poet_mem_efficient_mode", action="store_true")
     parser.add_argument("--gd_warmup_steps", type=int, default=2000)
@@ -195,7 +194,8 @@ def parse_args(args):
     parser.add_argument("--poet_use_rmsnorm", action="store_true")
 
     # POET-XQ parameters
-    parser.add_argument("--weight_quant", action='store_true')
+    parser.add_argument("--weight_bits", type=int, default=8)
+    parser.add_argument("--weight_group_size", type=int, default=256)
     
     # disable ddp, single_gpu
     parser.add_argument("--single_gpu", default=False, action="store_true")
@@ -344,29 +344,49 @@ def main(args):
     
     model_config = AutoConfig.from_pretrained(args.model_config)
     if args.use_hf_model:
-        model: HF_LlamaForCausalLM = AutoModelForCausalLM.from_config(model_config)
+        base_model: HF_LlamaForCausalLM = AutoModelForCausalLM.from_config(model_config)
     else:
-        model = LlamaForCausalLM(model_config)
+        base_model = LlamaForCausalLM(model_config)
 
     if args.activation_checkpointing:
-        model.gradient_checkpointing_enable()
-
-    if args.weight_quant:
-        # Enable INT8 training
-        assert args.optimizer.lower() in [
-            "q_poet",
-            "q_poet_per_layer",
-        ]
-        target_module = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'up_proj', 'down_proj', 'gate_proj']
-        model = prepare_model_for_int8_training_poet(model, args, target_module)
-        print('--'*20)
-        print('Prepare Model for Int8 Training')
-        print('--'*20)
+        base_model.gradient_checkpointing_enable()
 
     global_step = 0
     update_step = 0
     tokens_seen = 0
     tokens_seen_before = 0
+
+    # Setup POET config and wrap model
+    poet_config = None
+    if args.optimizer.lower() == "poet":
+        poet_config = POETConfig(
+            block_size=args.poet_block_size,
+            merge_interval=args.poet_merge_interval,
+            poet_lr=args.poet_lr,
+            base_lr=args.lr,
+            weight_decay=args.weight_decay,
+            mem_efficient_mode=args.poet_mem_efficient_mode,
+            init_type=args.init_type,
+        )
+        logger.info("Using POET optimizer")
+    elif args.optimizer.lower() == "q_poet":
+        poet_config = QPOETConfig(
+            block_size=args.poet_block_size,
+            merge_interval=args.poet_merge_interval,
+            poet_lr=args.poet_lr,
+            base_lr=args.lr,
+            weight_decay=args.weight_decay,
+            init_type=args.init_type,
+            weight_bits=args.weight_bits,
+            weight_group_size=args.weight_group_size,
+        )
+        logger.info("Using QPOET optimizer (INT8 quantization)")
+
+    # Wrap model with POET if using POET or QPOET
+    if poet_config is not None:
+        model = POETModel(base_model, poet_config)
+    else:
+        model = base_model
 
     if args.continue_from is not None:
         logger.info("*" * 40)
@@ -397,12 +417,6 @@ def main(args):
     else:
         model = model.to(device=device)
 
-    # INT8 training: move the scales and zeros to the same device as the weight
-    for _, module in model.named_modules():
-        if isinstance(module, QPOETLinear):
-            weight_device = module.weight.device
-            module.weight_scales = module.weight_scales.to(device=weight_device)
-            module.weight_zeros = module.weight_zeros.to(device=weight_device)
 
     n_total_params = sum(p.numel() for p in model.parameters())
     trainable_params = [p for p in model.parameters() if p.requires_grad]
@@ -423,60 +437,9 @@ def main(args):
         # doesn't jump around when changing from external display to laptop
         pbar = tqdm(total=args.num_training_steps - update_step, desc="Update steps", ncols=80)
     
-    if args.optimizer.lower() == "poet":
-        replace_linear_with_poet(model, args.poet_block_size, args.init_type, device=model.device, dtype=model.dtype)
-        
-        poet_params = []
-        for name, param in model.named_parameters():
-            if not param.requires_grad:
-                continue
-            if 'oft' in name:
-                poet_params.append(param)
-
-        id_poet_params = {id(param) for param in poet_params}
-        decay_params, nodecay_params = [], []  # they are non-poet parameters
-        for name, param in model.named_parameters():
-            if not param.requires_grad:
-                continue
-            if id(param) in id_poet_params:
-                continue
-            if param.ndim >= 2 and not name.endswith('bias'):
-                decay_params.append(param)
-            else:
-                nodecay_params.append(param)
-
-        # poet params
-        param_groups = [
-            dict(params=nodecay_params, weight_decay=0.0, lr=args.lr),
-            dict(params=decay_params, weight_decay=args.weight_decay, lr=args.lr),
-            dict(params=poet_params, weight_decay=0.0, lr=args.poet_lr, use_poet=True, poet_reset_gap=args.poet_reset_gap, poet_scale=0.5),
-        ]
-
-    elif args.optimizer.lower() == "q_poet":
-        qpoet_params = []
-        for name, param in model.named_parameters():
-            if param.requires_grad and 'oft' in name:
-                qpoet_params.append(param)
-
-        id_qpoet_params = {id(param) for param in qpoet_params}
-        decay_params, nodecay_params = [], []  # they are non-poet parameters
-        for name, param in model.named_parameters():
-            if not param.requires_grad:
-                continue
-            if id(param) in id_qpoet_params:
-                continue
-            if param.ndim >= 2 and not name.endswith('bias'):
-                decay_params.append(param)
-            else:
-                nodecay_params.append(param)
-
-        # poet params
-        param_groups = [
-            dict(params=nodecay_params, weight_decay=0.0, lr=args.lr),
-            dict(params=decay_params, weight_decay=args.weight_decay, lr=args.lr),
-            dict(params=qpoet_params, weight_decay=0.0, lr=args.poet_lr, use_poet=True, poet_reset_gap=args.poet_reset_gap, poet_scale=0.5),
-        ]
-
+    # Setup optimizer
+    if args.optimizer.lower() == "poet" or args.optimizer.lower() == "q_poet":
+        optimizer = get_poet_optimizer(model, poet_config)
     elif args.optimizer.lower() == "muon":
         muon_params = []
         target_modules_list = ["attn", "mlp"]
@@ -497,23 +460,6 @@ def main(args):
             {'params': regular_params, 'use_muon': False, 'lr': args.lr, 'weight_decay': args.weight_decay},           
             {'params': muon_params, 'use_muon': True, 'lr': 0.02, 'weight_decay': args.weight_decay},
         ]
-
-    # print params and trainable params
-    logger.info(f"\n{model}\n")
-    logger.info(f"Total params: {sum(p.numel() for p in model.parameters()) / 1_000_000:.2f}M")
-    logger.info(f"Trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad) / 1_000_000:.2f}M")
-    logger.info(f"Saving model to {args.save_dir} every {args.save_every} update steps")
-    
-    if args.optimizer.lower() == "adamw":
-        optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=args.weight_decay)
-    elif args.optimizer.lower() == "poet":
-        optimizer = POETAdamW(
-            param_groups,
-            lr=args.lr,
-            weight_decay=args.weight_decay,
-            poet_block_size=args.poet_block_size,
-        )
-    elif args.optimizer.lower() == "muon":
         muon_params = []
         adamw_params = []
         for group in param_groups:
@@ -527,9 +473,8 @@ def main(args):
             muon_params=muon_params,
             adamw_params=adamw_params,
         )
-    elif args.optimizer.lower() == "q_poet":
-        optimizer = POETAdamW(param_groups, lr=args.lr, weight_decay=args.weight_decay, poet_block_size=args.poet_block_size)
-    
+    elif args.optimizer.lower() == "adamw":
+        optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=args.weight_decay)
     else:
         raise ValueError(f"Optimizer {args.optimizer} not supported")
 
@@ -543,19 +488,24 @@ def main(args):
     )
 
     # base model is the model without FSDP
-    base_model = model
+    base_model_for_save = model.base_model if isinstance(model, POETModel) else model
     torch.compiler.reset()
     model = torch.compile(model)
 
     if not args.single_gpu:
         if any(k in args.optimizer.lower() for k in ('poet', 'muon', 'adamw')):
-            model: LlamaForCausalLM = torch.nn.parallel.DistributedDataParallel(
+            # DDP here
+            model = torch.nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[local_rank],
                 output_device=local_rank,
                 broadcast_buffers=False,
                 # find_unused_parameters=True,
             )
+            if global_rank == 0:
+                base_model_for_save = model.module.base_model if isinstance(model.module, POETModel) else model.module
+            else:
+                base_model_for_save = None
         else:
             mixed_precision_policy = None
             if args.dtype in ["bf16", "bfloat16"]:
@@ -629,13 +579,13 @@ def main(args):
         if args.grad_clipping != 0.0: 
             if 'poet' in args.optimizer.lower():
                 parameters = []
-                for group in param_groups:
+                for group in optimizer.param_groups:
                     parameters.extend(group['params'])
-                current_grad_clipping_value = get_grad_clipping_value(
+                current_grad_clipping_value = calc_poet_grad_clipping_value(
                     global_step=optimizer_step_count,
                     grad_clipping=args.grad_clipping,
                     warmup_steps=10,
-                    period_T=args.poet_reset_gap,
+                    poet_merge_interval=args.poet_merge_interval,
                     min_ratio=0.1,
                     max_steps=args.gd_warmup_steps,
                 )
@@ -655,8 +605,12 @@ def main(args):
         optimizer.zero_grad()
         optimizer_step_count += 1
 
-        if args.optimizer.lower() == "poet" or args.optimizer.lower() == "q_poet":
-            check_and_merge(model, optimizer_step_count, args.poet_reset_gap)
+        if args.optimizer.lower() in ("poet", "q_poet"):
+            # Use the underlying model for merge_if_needed
+            if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+                model.module.merge_if_needed(optimizer_step_count)
+            else:
+                model.merge_if_needed(optimizer_step_count)
 
         update_step += 1
         update_time = time.time() - update_time
@@ -670,10 +624,10 @@ def main(args):
             # Save model - handle FSDP vs DDP/single_gpu differently
             if any(k in args.optimizer.lower() for k in ('poet', 'muon', 'adamw')):
                 if args.single_gpu:
-                    model.save_pretrained(current_model_directory, max_shard_size='100GB')
+                    base_model_for_save.save_pretrained(current_model_directory, max_shard_size='100GB')
                 else:
                     if global_rank == 0:
-                        model.module.save_pretrained(current_model_directory, max_shard_size='100GB')
+                        base_model_for_save.save_pretrained(current_model_directory, max_shard_size='100GB')
             else:
                 if not args.single_gpu:
                     with FSDP.state_dict_type(
@@ -682,12 +636,12 @@ def main(args):
                     ):
                         full_state_dict = model.state_dict()
                     if global_rank == 0:
-                        base_model.save_pretrained(
+                        base_model_for_save.save_pretrained(
                             current_model_directory,
                             state_dict=full_state_dict,
                         )
                 else:
-                    model.save_pretrained(current_model_directory)
+                    base_model_for_save.save_pretrained(current_model_directory)
 
             if global_rank == 0:
                 optimizer_checkpoint = {
@@ -752,11 +706,10 @@ def main(args):
 
         if any(k in args.optimizer.lower() for k in ('poet', 'muon', 'adamw')):
             if args.single_gpu:
-                model.save_pretrained(current_model_directory)
+                base_model_for_save.save_pretrained(current_model_directory)
             else:
-                to_save = model.module
                 if global_rank == 0:
-                    to_save.save_pretrained(current_model_directory)
+                    base_model_for_save.save_pretrained(current_model_directory)
         else:
             with FSDP.state_dict_type(
                 model, StateDictType.FULL_STATE_DICT,
@@ -764,7 +717,7 @@ def main(args):
             ):
                 full_state_dict = model.state_dict()
             if global_rank == 0:
-                base_model.save_pretrained(
+                base_model_for_save.save_pretrained(
                     current_model_directory,
                     state_dict=full_state_dict,
                 )
