@@ -332,9 +332,17 @@ if HAS_TRITON:
     
     @torch.library.custom_op("poet::chain_layer_checkpoint_mem_o2", mutates_args=())
     def chain_layer_checkpoint_mem_o2(
-        x, Rin, W, b, Rout,
-        perm_in_inv, perm_in, perm_out, perm_out_inv, bsz
-    ):
+        x: torch.Tensor,
+        Rin: torch.Tensor,
+        W: torch.Tensor,
+        b: Optional[torch.Tensor],
+        Rout: torch.Tensor,
+        perm_in_inv: torch.Tensor,
+        perm_in: torch.Tensor,
+        perm_out: torch.Tensor,
+        perm_out_inv: torch.Tensor,
+        bsz: int,
+    ) -> torch.Tensor:
         x = x[..., perm_in_inv]
 
         B, S, Din = x.shape
@@ -446,8 +454,16 @@ if HAS_TRITON:
 
     @torch.library.custom_op("poet::chain_layer_checkpoint_q8", mutates_args=())
     def chain_layer_checkpoint_q8(
-        x, Rin, W_q, W_scales, W_zeros, group_size, b, Rout, bsz
-    ):
+        x: torch.Tensor,
+        Rin: torch.Tensor,
+        W_q: torch.Tensor,        # int8 quantized weight
+        W_scales: torch.Tensor,   # scales for dequantization
+        W_zeros: torch.Tensor,    # zeros for dequantization
+        group_size: int,
+        b: Optional[torch.Tensor],
+        Rout: torch.Tensor,
+        bsz: int,
+    ) -> torch.Tensor:
         B, S, Din = x.shape
         rin = Rin.size(0)
         rout = Rout.size(0)
@@ -557,9 +573,20 @@ if HAS_TRITON:
 
     @torch.library.custom_op("poet::chain_layer_checkpoint_mem_o2_q8", mutates_args=())
     def chain_layer_checkpoint_mem_o2_q8(
-        x, Rin, W_q, W_scales, W_zeros, group_size, b, Rout,
-        perm_in_inv, perm_in, perm_out, perm_out_inv, bsz
-    ):
+        x: torch.Tensor,
+        Rin: torch.Tensor,
+        W_q: torch.Tensor,        # int8 quantized weight
+        W_scales: torch.Tensor,   # scales for dequantization
+        W_zeros: torch.Tensor,    # zeros for dequantization
+        group_size: int,
+        b: Optional[torch.Tensor],
+        Rout: torch.Tensor,
+        perm_in_inv: torch.Tensor,
+        perm_in: torch.Tensor,
+        perm_out: torch.Tensor,
+        perm_out_inv: torch.Tensor,
+        bsz: int,
+    ) -> torch.Tensor:
         x = x[..., perm_in_inv]
         
         B, S, Din = x.shape

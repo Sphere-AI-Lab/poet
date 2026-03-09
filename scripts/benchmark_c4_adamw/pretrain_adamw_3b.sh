@@ -1,6 +1,6 @@
 # Running on 8 B200s
 torchrun --standalone --nproc_per_node 8 torchrun_main.py \
-    --model_config configs/llama_3b.json \
+    --model_config exmaples/configs/llama_3b.json \
     --lr 0.0005 \
     --batch_size 64 \
     --total_batch_size 512 \
