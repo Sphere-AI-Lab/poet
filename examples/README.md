@@ -9,7 +9,10 @@ This directory contains simple examples demonstrating the `poet_torch` API.
 from poet_torch import POETConfig, POETModel, get_poet_optimizer
 
 # 1. Create config
-config = POETConfig(block_size=256, merge_interval=200)
+config = POETConfig(
+    block_size=256,       # POET Block size
+    merge_interval=200,   # Steps between merge-then-reinitialize
+)
 
 # 2. Wrap your model
 model = POETModel(your_model, config)
@@ -20,6 +23,7 @@ optimizer = get_poet_optimizer(model, config)
 # 4. Training loop
 for step, batch in enumerate(dataloader):
     loss = model(**batch)
+    optimizer.zero_grad()
     loss.backward()
     optimizer.step()
     model.merge_if_needed(step)  # Automatic merge

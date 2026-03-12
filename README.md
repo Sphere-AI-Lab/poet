@@ -143,25 +143,25 @@ Get started with POET in just a few lines of code:
 ```python
 from poet_torch import POETConfig, POETModel, get_poet_optimizer
 
-# 1. Configure POET
+# 1. Create config
 config = POETConfig(
-    block_size=256,       # Block size for block-stochastic optimization
+    block_size=256,       # POET Block size
     merge_interval=200,   # Steps between merge-then-reinitialize
 )
 
-# 2. Wrap your model with POET
+# 2. Wrap your model
 model = POETModel(your_model, config)
 
-# 3. Create optimizer (automatically handles orthogonal parameters)
-optimizer = get_poet_optimizer(model, lr=1e-3)
+# 3. Create optimizer
+optimizer = get_poet_optimizer(model, config)
 
 # 4. Training loop
 for step, batch in enumerate(dataloader):
-    optimizer.zero_grad()
     loss = model(**batch)
+    optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    model.merge_if_needed(step)  # Periodic merge (zero overhead after training)
+    model.merge_if_needed(step)  # Automatic merge
 ```
 
 ### Key Components
