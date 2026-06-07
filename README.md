@@ -335,17 +335,17 @@ Four engineering innovations:
 ## Citation
 
 ```bibtex
-@article{qiu2025poet,
+@InProceedings{qiu2025poet,
   title={Reparameterized LLM Training via Orthogonal Equivalence Transformation},
   author={Qiu, Zeju and Buchholz, Simon and Xiao, Tim Z. and Dax, Maximilian and Sch{\"o}lkopf, Bernhard and Liu, Weiyang},
-  journal={arXiv preprint arXiv:2506.08001},
+  booktitle={NeurIPS},
   year={2025}
 }
 
-@article{qiu2025poetx,
+@InProceedings{qiu2026poetx,
   title={POET-X: Memory-efficient LLM Training by Scaling Orthogonal Transformation}, 
   author={Qiu, Zeju and Liu, Lixin and Weller, Adrian and Shi, Han and Liu, Weiyang},
-  journal={arXiv preprint arXiv:2603.05500},
+  booktitle={ICML},
   year={2026},
 }
 ```
